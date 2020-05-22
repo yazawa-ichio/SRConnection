@@ -1,5 +1,6 @@
 ﻿using SRNet.Channel;
 using SRNet.Packet;
+using SRNet.Stun;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -152,10 +153,14 @@ namespace SRNet
 			return m_Channel.TryPollRead(out message, microSeconds, retryNoMessageIfReceive);
 		}
 
-		public Task<Message[]> ConnectP2P(PeerInfo[] list, bool runReceive = true)
+		public void ConnectP2P(PeerInfo[] list, bool init = true)
 		{
-			m_Impl.UpdateConnectPeerList(list);
-			return WaitP2PConnectComplete(runReceive);
+			m_Impl.UpdateConnectPeerList(list, init);
+		}
+
+		public void AddConnectP2P(PeerInfo info)
+		{
+			m_Impl.AddConnectPeerList(info);
 		}
 
 		public async Task<Message[]> WaitP2PConnectComplete(bool runReceive = true)
@@ -173,9 +178,19 @@ namespace SRNet
 			return ret.ToArray();
 		}
 
+		public void CancelP2PHandshake(int connectionId)
+		{
+			m_Impl.CancelP2PHandshake(connectionId);
+		}
+
 		public void CancelP2PHandshake()
 		{
-			m_Impl.UpdateConnectPeerList(Array.Empty<PeerInfo>());
+			m_Impl.UpdateConnectPeerList(Array.Empty<PeerInfo>(), true);
+		}
+
+		public Task<StunResult> StunQuery(string host, int port, TimeSpan timeout)
+		{
+			return m_Impl.StunQuery(host, port, timeout);
 		}
 
 		void OnAdd(PeerEntry entry)

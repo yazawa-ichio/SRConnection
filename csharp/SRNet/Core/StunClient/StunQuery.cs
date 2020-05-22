@@ -14,6 +14,11 @@ namespace SRNet.Stun
 		TaskCompletionSource<StunMessage> m_Future;
 		TimeSpan m_Timeout;
 		IPEndPoint m_RemoteEP;
+		Task<StunResult> m_RunTask;
+
+		public bool IsCompleted => m_RunTask?.IsCompleted ?? false;
+
+		public StunResult Result { get; private set; }
 
 		public StunQuery(Socket socket, string host, int port) : this(socket, host, port, TimeSpan.FromMilliseconds(1600)) { }
 
@@ -44,6 +49,15 @@ namespace SRNet.Stun
 
 		public async Task<StunResult> Run()
 		{
+			if (m_RunTask != null) await m_RunTask;
+			m_RunTask = RunImpl();
+			Result = await m_RunTask;
+			m_RunTask = null;
+			return Result;
+		}
+
+		async Task<StunResult> RunImpl()
+		{
 			if (m_Future != null) throw new Exception("already run");
 			if (m_RemoteEP == null)
 			{
@@ -53,7 +67,7 @@ namespace SRNet.Stun
 			var test1 = await DoTransaction(m_RemoteEP);
 			if (test1 == null)
 			{
-				return new StunResult(NatType.Unspecified, null, await GetLocalEndPoint());
+				return Result = new StunResult(NatType.Unspecified, null, await GetLocalEndPoint());
 			}
 
 			var test2 = await DoTransaction(true, true, m_RemoteEP);
@@ -99,12 +113,14 @@ namespace SRNet.Stun
 		async Task<IPEndPoint> GetEndPoint()
 		{
 			var address = await Dns.GetHostAddressesAsync(m_Host);
-			IPEndPoint remoteEP = null;
 			for (int i = 0; i < address.Length; i++)
 			{
-				remoteEP = new IPEndPoint(address[i], m_Port);
+				if (address[i].AddressFamily == m_Socket.LocalEndPoint.AddressFamily)
+				{
+					return new IPEndPoint(address[i], m_Port);
+				}
 			}
-			return remoteEP;
+			throw new Exception("not found address : " + m_Host);
 		}
 
 		Task<StunMessage> DoTransaction(IPEndPoint remoteEP)
@@ -134,7 +150,10 @@ namespace SRNet.Stun
 			var timeoutAt = DateTime.UtcNow.Add(m_Timeout);
 			while (timeoutAt > DateTime.UtcNow)
 			{
-				m_Socket.SendTo(buf, size, SocketFlags.None, remoteEP);
+				lock (m_Socket)
+				{
+					m_Socket.SendTo(buf, size, SocketFlags.None, remoteEP);
+				}
 				await Task.WhenAny(m_Future.Task, Task.Delay(200));
 				if (m_Future.Task.IsCompleted)
 				{
@@ -147,7 +166,7 @@ namespace SRNet.Stun
 			return null;
 		}
 
-		public void Receive(byte[] buf)
+		public bool TryReceive(byte[] buf)
 		{
 			StunMessage response = new StunMessage(MessageType.BindingResponse);
 			if (response.TryParse(buf))
@@ -156,11 +175,13 @@ namespace SRNet.Stun
 				{
 					if (m_Request.TransactionId[i] != response.TransactionId[i])
 					{
-						return;
+						return false;
 					}
 				}
 				m_Future?.SetResult(response);
+				return true;
 			}
+			return false;
 		}
 
 	}

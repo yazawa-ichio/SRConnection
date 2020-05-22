@@ -72,10 +72,9 @@ namespace SRNet.Tests
 		[TestMethod, Timeout(10000)]
 		public async Task ローカルP2Pテスト()
 		{
-			using (var host = await Connection.StartHost("TestRoom"))
+			using (var host = await Connection.StartLocalHost("TestRoom"))
 			using (var server = new EchoServer(host))
 			{
-				host.DiscoveryService.Start();
 				DiscoveryRoom room = null;
 				using (var discovery = new DiscoveryClient())
 				{
@@ -182,5 +181,6 @@ namespace SRNet.Tests
 				Assert.IsTrue(success, "メッセージを受け取れる");
 			}
 		}
+
 	}
 }

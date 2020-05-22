@@ -76,6 +76,11 @@ namespace SRNet.Packet
 			return new IPEndPoint(IPAddress.Parse(Address), Port);
 		}
 
+		public override string ToString()
+		{
+			return Address + ":" + Port;
+		}
+
 		public static PeerEndPoint Unpack(byte[] buf, ref int offset)
 		{
 			var addressSize = buf[offset++];

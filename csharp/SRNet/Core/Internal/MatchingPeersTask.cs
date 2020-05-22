@@ -14,7 +14,7 @@ namespace SRNet
 		static readonly string DefaultStunURL = "stun.l.google.com";
 
 		UdpSocket m_Socket;
-		Func<StunResult, Task<P2PSetting>> m_Func;
+		Func<StunResult, Task<P2PSettings>> m_Func;
 		string m_StunURL;
 
 		public MatchingPeersTask(string postUrl, string stunURL = null)
@@ -23,7 +23,7 @@ namespace SRNet
 			m_StunURL = stunURL ?? DefaultStunURL;
 		}
 
-		public MatchingPeersTask(Func<StunResult, Task<P2PSetting>> func, string stunURL = null)
+		public MatchingPeersTask(Func<StunResult, Task<P2PSettings>> func, string stunURL = null)
 		{
 			m_Func = func;
 			m_StunURL = stunURL ?? DefaultStunURL;
@@ -35,13 +35,13 @@ namespace SRNet
 			{
 				m_Socket = new UdpSocket();
 				m_Socket.Bind();
-				var stunResult = await m_Socket.StunQuery(m_StunURL, 19302);
+				var stunResult = await StunClient.Run(m_Socket.m_UdpClient, m_StunURL, 19302);
 				var response = await m_Func(stunResult);
 				return new P2PConnectionImpl(response, m_Socket);
 			}
 			catch (Exception ex)
 			{
-				Console.WriteLine(ex);
+				Log.Exception(ex);
 				m_Socket.Dispose();
 				throw;
 			}
@@ -70,7 +70,7 @@ namespace SRNet
 			public Peer[] peers = null;
 		}
 
-		async Task<P2PSetting> MatchingRequest(string url, StunResult ret)
+		async Task<P2PSettings> MatchingRequest(string url, StunResult ret)
 		{
 			var json = $"{{\"endpoint\":\"{ret.EndPoint}\",\"local_endpoint\":\"{ret.LocalEndPoint}\", \"nattype\": \"{ret.NatType}\"}}";
 			var content = new StringContent(json);
@@ -81,7 +81,7 @@ namespace SRNet
 				{
 					json = await response.Content.ReadAsStringAsync();
 					var res = Json.From<Response>(json);
-					return new P2PSetting
+					return new P2PSettings
 					{
 						SelfId = res.id,
 						Peers = res.peers.Select(x => x.Create()).ToArray()

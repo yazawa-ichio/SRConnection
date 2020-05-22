@@ -11,10 +11,13 @@ namespace SRNet
 	{
 		const int SioUdpConnreset = -1744830452;
 		Socket m_Socket;
-		UdpClient m_UdpClient;
+		internal UdpClient m_UdpClient;
 		EndPoint m_RemoteEP;
+		StunQuery m_StunQuery;
 
 		public IPEndPoint LocalEP => m_Socket.LocalEndPoint as IPEndPoint;
+
+		public StunResult StunResult => m_StunQuery?.Result ?? null;
 
 		~UdpSocket()
 		{
@@ -43,10 +46,28 @@ namespace SRNet
 
 		public bool TryReceiveFrom(byte[] buffer, ref int size, ref IPEndPoint remoteEP)
 		{
-			if (m_Socket.Available == 0) return false;
-			size = m_Socket.ReceiveFrom(buffer, ref m_RemoteEP);
-			remoteEP = m_RemoteEP as IPEndPoint;
-			return true;
+			while (true)
+			{
+				if (m_Socket.Available == 0) return false;
+				size = m_Socket.ReceiveFrom(buffer, ref m_RemoteEP);
+				remoteEP = m_RemoteEP as IPEndPoint;
+				if (CheckStunQuery(buffer, size))
+				{
+					continue;
+				}
+				return true;
+			}
+		}
+
+		bool CheckStunQuery(byte[] buffer, int size)
+		{
+			if (m_StunQuery == null || m_StunQuery.IsCompleted) return false;
+
+			if (size >= 20 && m_StunQuery.TryReceive(buffer))
+			{
+				return true;
+			}
+			return false;
 		}
 
 		public bool Poll(int microSeconds, SelectMode mode)
@@ -67,22 +88,29 @@ namespace SRNet
 
 		public void Send(byte[] buf, int offest, int size, EndPoint remoteEP)
 		{
-			m_Socket.SendTo(buf, offest, size, SocketFlags.None, remoteEP);
+			lock (m_Socket)
+			{
+				m_Socket.SendTo(buf, offest, size, SocketFlags.None, remoteEP);
+			}
 		}
 
 		public bool Broadcast(byte[] buf, int offest, int size, int port)
 		{
-			return m_Socket.SendTo(buf, offest, size, SocketFlags.None, new IPEndPoint(IPAddress.Broadcast, port)) > 0;
+			lock (m_Socket)
+			{
+				return m_Socket.SendTo(buf, offest, size, SocketFlags.None, new IPEndPoint(IPAddress.Broadcast, port)) > 0;
+			}
 		}
 
-		public Task<StunResult> StunQuery(string host, int port)
-		{
-			return StunClient.Run(m_UdpClient, host, port);
-		}
 
 		public Task<StunResult> StunQuery(string host, int port, TimeSpan timeout)
 		{
-			return new StunQuery(m_Socket, host, port, timeout).Run();
+			if (m_StunQuery != null && !m_StunQuery.IsCompleted)
+			{
+				return m_StunQuery.Run();
+			}
+			m_StunQuery = new StunQuery(m_Socket, host, port, timeout);
+			return m_StunQuery.Run();
 		}
 
 		public void Dispose()

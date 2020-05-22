@@ -11,23 +11,25 @@ namespace SRNet
 		bool m_IsOwner;
 		bool m_PeerToPeerListDirty = true;
 		PeerToPeerList m_PeerToPeerList = default;
-
-		public DiscoveryService DiscoveryService { get; private set; }
+		DiscoveryService m_DiscoveryService;
 
 		protected override bool IsHost => m_IsOwner;
 
 		protected override bool UseP2P => true;
 
-		internal P2PConnectionImpl(string roomName, IPAddress address) : base(new UdpSocket(), new EncryptorGenerator())
+		public bool DisposeOnDisconnectOwnder { get; set; } = true;
+
+		internal P2PConnectionImpl(LocalHostConfig config) : base(new UdpSocket(), new EncryptorGenerator())
 		{
+			m_IsOwner = true;
 			m_CookieProvider.Update();
-			m_Socket.Bind(new IPEndPoint(address, 0), false);
+			m_Socket.Bind(new IPEndPoint(config.Address, 0), false);
 			SelfId = Random.GenInt();
 			m_P2PTaskManager.CreateHostRandamKey();
 			var randamKey = m_P2PTaskManager.GetHostRandamKey();
 			var data = new PeerToPeerRoomData(SelfId, m_CookieProvider.Cookie, randamKey).Pack();
-			DiscoveryService = new DiscoveryService(roomName, m_Socket.LocalEP, data);
-			DiscoveryService.OnHolePunchRequest += (ep) =>
+			m_DiscoveryService = new DiscoveryService(config.RoomName, m_Socket.LocalEP, data, config.DiscoveryServicePort);
+			m_DiscoveryService.OnHolePunchRequest += (ep) =>
 			{
 				lock (m_Socket)
 				{
@@ -35,7 +37,7 @@ namespace SRNet
 					m_Socket.Send(packet, 0, packet.Length, ep);
 				}
 			};
-			m_IsOwner = true;
+			m_DiscoveryService.Start(config.DiscoveryQueryMatch);
 		}
 
 		internal P2PConnectionImpl(int selfId, UdpSocket socket, PeerEntry owner, EncryptorGenerator encryptorGenerator) : base(socket, encryptorGenerator)
@@ -43,20 +45,21 @@ namespace SRNet
 			SelfId = selfId;
 			m_CookieProvider.Update();
 			m_Owner = owner;
+			m_IsOwner = false;
 			m_PeerManager.Add(m_Owner);
 		}
 
-		internal P2PConnectionImpl(P2PSetting setting, UdpSocket socket) : base(socket, new EncryptorGenerator())
+		internal P2PConnectionImpl(P2PSettings setting, UdpSocket socket) : base(socket, new EncryptorGenerator())
 		{
 			m_CookieProvider.Update();
 			m_IsOwner = false;
 			SelfId = setting.SelfId;
-			UpdateConnectPeerList(setting.Peers);
+			UpdateConnectPeerList(setting.Peers, true);
 		}
 
 		protected override void Dispose(bool disposing)
 		{
-			DiscoveryService?.Dispose();
+			m_DiscoveryService?.Dispose();
 			BroadcastDisconnect();
 			base.Dispose(disposing);
 		}
@@ -71,10 +74,15 @@ namespace SRNet
 		{
 			base.OnRemove(peer);
 			m_PeerToPeerListDirty = true;
-			if (!m_IsOwner && m_Owner.ConnectionId == peer.ConnectionId)
+			if (DisposeOnDisconnectOwnder && m_Owner != null && m_Owner.ConnectionId == peer.ConnectionId)
 			{
 				Dispose();
 			}
+		}
+
+		public void StopMatching()
+		{
+			m_DiscoveryService?.Dispose();
 		}
 
 		protected override void TimerUpdate(TimeSpan delta)

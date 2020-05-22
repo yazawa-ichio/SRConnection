@@ -29,6 +29,7 @@ namespace SRNet
 				{
 					if (task.IsFaulted)
 					{
+						Log.Warning(task.Exception.ToString());
 						continue;
 					}
 					else

@@ -67,7 +67,7 @@ namespace SRNet
 			}
 			catch (Exception ex)
 			{
-				Console.WriteLine(ex);
+				Log.Exception(ex);
 				m_Socket.Dispose();
 				m_EncryptorGenerator.Dispose();
 				throw;

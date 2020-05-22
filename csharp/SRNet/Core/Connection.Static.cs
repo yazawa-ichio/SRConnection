@@ -13,15 +13,20 @@ namespace SRNet
 			return new Connection(new ServerConnectionImpl(config));
 		}
 
+		public static Task<P2PHostConnection> StartLocalHost(string roomName)
+		{
+			return StartLocalHost(new LocalHostConfig { RoomName = roomName });
+		}
+
+		public static Task<P2PHostConnection> StartLocalHost(LocalHostConfig config)
+		{
+			var impl = new P2PConnectionImpl(config);
+			return Task.FromResult(new P2PHostConnection(impl));
+		}
+
 		public static async Task<ClientConnection> Connect(ServerConnectSettings settings)
 		{
 			return new ClientConnection(await new ConnectToServerTask(settings).Run());
-		}
-
-		public static Task<P2PHostConnection> StartHost(string roomName)
-		{
-			var impl = new P2PConnectionImpl(roomName, IPAddress.Any);
-			return Task.FromResult(new P2PHostConnection(impl));
 		}
 
 		public static async Task<Connection> Connect(DiscoveryRoom room)
@@ -41,7 +46,7 @@ namespace SRNet
 			return new Connection(impl);
 		}
 
-		public static async Task<Connection> P2PMatching(Func<StunResult, Task<P2PSetting>> func, string stunURL = null)
+		public static async Task<Connection> P2PMatching(Func<StunResult, Task<P2PSettings>> func, string stunURL = null)
 		{
 			var impl = await new MatchingPeersTask(func, stunURL).Run();
 			return new Connection(impl);

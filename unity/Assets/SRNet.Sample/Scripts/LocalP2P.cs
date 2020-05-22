@@ -101,8 +101,7 @@ namespace SRNet.Sample
 			{
 				try
 				{
-					var connection = await Connection.StartHost(Param.ToString());
-					connection.DiscoveryService.Start();
+					var connection = await Connection.StartLocalHost(Param.ToString());
 					Owner.Conn = connection;
 					Transition(Event.Run, connection);
 				}

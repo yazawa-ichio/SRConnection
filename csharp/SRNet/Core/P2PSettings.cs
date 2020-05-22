@@ -2,7 +2,7 @@
 
 namespace SRNet
 {
-	public class P2PSetting
+	public class P2PSettings
 	{
 		public int SelfId;
 		public PeerInfo[] Peers;

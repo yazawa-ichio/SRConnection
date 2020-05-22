@@ -74,7 +74,10 @@ namespace SRNet
 			}
 			catch (Exception ex)
 			{
-				Console.WriteLine(ex);
+				if (m_Run)
+				{
+					Log.Exception(ex);
+				}
 			}
 		}
 

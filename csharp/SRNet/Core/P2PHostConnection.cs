@@ -1,13 +1,20 @@
 ﻿namespace SRNet
 {
+
 	public class P2PHostConnection : Connection
 	{
-		public DiscoveryService DiscoveryService { get; private set; }
 
+		P2PConnectionImpl m_Impl;
 		internal P2PHostConnection(P2PConnectionImpl impl) : base(impl)
 		{
-			DiscoveryService = impl.DiscoveryService;
+			m_Impl = impl;
 		}
+
+		public void StopMatching()
+		{
+			m_Impl.StopMatching();
+		}
+
 	}
 
 }

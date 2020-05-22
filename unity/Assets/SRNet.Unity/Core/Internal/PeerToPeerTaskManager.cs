@@ -15,7 +15,7 @@ namespace SRNet
 		EncryptorGenerator m_EncryptorGenerator;
 		CookieProvider m_CookieProvider;
 		PeerToPeerList m_P2PList;
-		PeerInfo[] m_PeerInfoList;
+		PeerInfo[] m_PeerInfoList = Array.Empty<PeerInfo>();
 		byte[] m_RandamKey;
 
 		public PeerToPeerTaskManager(ConnectionImpl connection, CookieProvider cookieProvider, PeerManager manager)
@@ -167,7 +167,7 @@ namespace SRNet
 			if (PeerToPeerList.TryUnpack(buf, size, peer.Encryptor, out var packet))
 			{
 				m_P2PList = packet;
-				m_Connection.UpdateConnectPeerList(packet.Peers);
+				m_Connection.UpdateConnectPeerList(packet.Peers, true);
 			}
 		}
 
@@ -185,11 +185,63 @@ namespace SRNet
 			return null;
 		}
 
-		public void UpdateList(PeerInfo[] list)
+		List<PeerInfo> m_TempList = new List<PeerInfo>();
+		public void UpdateList(PeerInfo[] list, bool init)
+		{
+			if (init)
+			{
+				UpdateListImpl(list);
+			}
+			else
+			{
+				m_TempList.Clear();
+				m_TempList.AddRange(m_PeerInfoList);
+				foreach (var info in list)
+				{
+					if (Array.Exists(m_PeerInfoList, x => info.ConnectionId == x.ConnectionId))
+					{
+						continue;
+					}
+					m_TempList.Add(info);
+				}
+				var newList = m_TempList.ToArray();
+				m_TempList.Clear();
+				UpdateListImpl(newList);
+			}
+		}
+
+		public void Add(PeerInfo info)
+		{
+			if (Array.Exists(m_PeerInfoList, x => info.ConnectionId == x.ConnectionId))
+			{
+				return;
+			}
+			Array.Resize(ref m_PeerInfoList, m_PeerInfoList.Length + 1);
+			m_PeerInfoList[m_PeerInfoList.Length - 1] = info;
+			UpdateListImpl(m_PeerInfoList);
+		}
+
+		public void Remove(int connectionId)
+		{
+			m_TempList.Clear();
+			foreach (var info in m_PeerInfoList)
+			{
+				if (connectionId == info.ConnectionId)
+				{
+					continue;
+				}
+				m_TempList.Add(info);
+			}
+			var newList = m_TempList.ToArray();
+			m_TempList.Clear();
+			UpdateListImpl(newList);
+		}
+
+		void UpdateListImpl(PeerInfo[] list)
 		{
 			m_PeerInfoList = list;
 			bool requestFlag = true;
-			foreach (var info in list)
+			foreach (var info in m_PeerInfoList)
 			{
 				if (m_PeerManager.TryGetValue(info.ConnectionId, out PeerEntry peer))
 				{

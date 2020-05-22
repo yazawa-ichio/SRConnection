@@ -33,7 +33,7 @@ namespace SRNet.Stun
 					{
 						IPEndPoint remoteEP = null;
 						var buf = client.Receive(ref remoteEP);
-						query.Receive(buf);
+						query.TryReceive(buf);
 					}
 				}
 			});
