@@ -2,7 +2,7 @@
 
 namespace SRNet.Stun
 {
-	public class StringAttribute : StunAttribute 
+	public class StringAttribute : StunAttribute
 	{
 		public string Text { get; set; }
 
@@ -13,7 +13,7 @@ namespace SRNet.Stun
 			return Encoding.UTF8.GetByteCount(Text);
 		}
 
-		protected override void ReadBody(byte[] buf, int offset,int size)
+		protected override void ReadBody(byte[] buf, int offset, int size)
 		{
 			NetBinaryUtil.ReadString(buf, size, ref offset);
 		}
