@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Security.Cryptography;
+using HMAC = SRNet.Crypto.HMAC;
+using HMACSHA256 = SRNet.Crypto.HMACSHA256;
 
 namespace SRNet
 {
@@ -9,6 +11,7 @@ namespace SRNet
 		readonly Aes m_Aes;
 		readonly HMAC m_EncryptHMAC;
 		readonly HMAC m_DecryptHMAC;
+		readonly byte[] m_DecryptHMACBuf;
 		readonly ICryptoTransform m_Encryptor;
 		readonly ICryptoTransform m_Decryptor;
 		readonly int m_BlockSize;
@@ -24,10 +27,8 @@ namespace SRNet
 		{
 			m_Aes = Aes.Create();
 			m_Aes.Key = aeskey;
-			m_EncryptHMAC = new HMAC();
-			m_EncryptHMAC.Key = hmackey;
-			m_DecryptHMAC = new HMAC();
-			m_DecryptHMAC.Key = m_EncryptHMAC.Key;
+			m_EncryptHMAC = new HMACSHA256(hmackey);
+			m_DecryptHMAC = new HMACSHA256(hmackey);
 
 			m_Aes.Mode = CipherMode.ECB;
 			//アロケーションを避けるため自前でPKCS7を実装する
@@ -36,7 +37,8 @@ namespace SRNet
 			m_Encryptor = m_Aes.CreateEncryptor();
 			m_Decryptor = m_Aes.CreateDecryptor();
 			m_BlockSize = m_Aes.BlockSize / 8;
-			m_HashLength = m_EncryptHMAC.HashLength;
+			m_HashLength = m_EncryptHMAC.HashSize / 8;
+			m_DecryptHMACBuf = new byte[m_HashLength];
 		}
 
 		public void Encrypt(byte[] buf, int start, ref int totalSize)
@@ -49,17 +51,27 @@ namespace SRNet
 			totalSize += padSize;
 			m_Encryptor.TransformBlock(buf, start, totalSize - start, buf, start);
 
-			m_EncryptHMAC.AppendHash(buf, 0, totalSize);
+			m_EncryptHMAC.ComputeHash(buf, 0, totalSize, buf, totalSize);
+
 			totalSize += m_HashLength;
 		}
 
 		public bool TryDecrypt(byte[] buf, int start, ref int totalSize)
 		{
-			if (!m_DecryptHMAC.Check(buf, 0, totalSize))
-			{
-				return false;
-			}
 			totalSize -= m_HashLength;
+
+			if (totalSize < 0) return false;
+
+			m_DecryptHMAC.ComputeHash(buf, 0, totalSize, m_DecryptHMACBuf, 0);
+
+			for (int i = 0; i < m_DecryptHMACBuf.Length; i++)
+			{
+				if (m_DecryptHMACBuf[i] != buf[totalSize + i])
+				{
+					return false;
+				}
+			}
+
 			Decrypt(buf, start, ref totalSize);
 			return true;
 		}
@@ -79,39 +91,6 @@ namespace SRNet
 			m_EncryptHMAC.Dispose();
 		}
 
-		class HMAC : HMACSHA256
-		{
-			public readonly int HashLength;
-
-			public HMAC() : base()
-			{
-				HashLength = HashSize / 8;
-			}
-
-			public void AppendHash(byte[] data, int offset, int size)
-			{
-				HashCore(data, offset, size);
-				var hash = HashFinal();
-				Initialize();
-				Buffer.BlockCopy(hash, 0, data, offset + size, HashLength);
-			}
-
-			public bool Check(byte[] data, int offset, int size)
-			{
-				HashCore(data, offset, size - HashLength);
-				var hash = HashFinal();
-				Initialize();
-				for (int i = 0; i < HashLength; i++)
-				{
-					if (hash[i] != data[offset + size - HashLength + i])
-					{
-						return false;
-					}
-				}
-				return true;
-			}
-
-		}
 	}
 
 }
