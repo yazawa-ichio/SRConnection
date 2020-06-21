@@ -1,6 +1,5 @@
 ﻿using SRNet.Crypto;
 using System;
-using System.Security.Cryptography;
 
 namespace SRNet
 {
