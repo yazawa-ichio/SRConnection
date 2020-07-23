@@ -38,7 +38,7 @@ namespace SRNet
 			try
 			{
 				m_Socket = new UdpSocket();
-				m_Socket.Bind();
+				m_Socket.Bind(m_Settings.EndPoint.AddressFamily);
 				byte[] cookie;
 				if (m_Settings.Cookie == null)
 				{
@@ -53,9 +53,12 @@ namespace SRNet
 				}
 				{
 					var payload = new HandshakeRequestPayload(Random.GenInt(), m_Randam);
-					byte[] encryptPayload;
-					encryptPayload = m_Settings.RSA.Encrypt(payload.Pack(), RSAEncryptionPadding.Pkcs1);
-					var request = new HandshakeRequest(cookie, encryptPayload);
+					byte[] payloadBuf = payload.Pack();
+					if (m_Settings.RSA != null)
+					{
+						payloadBuf = m_Settings.RSA.Encrypt(payloadBuf, RSAEncryptionPadding.Pkcs1);
+					}
+					var request = new HandshakeRequest(cookie, payloadBuf);
 
 					m_EncryptorKey = new EncryptorKey(request, payload, 0);
 

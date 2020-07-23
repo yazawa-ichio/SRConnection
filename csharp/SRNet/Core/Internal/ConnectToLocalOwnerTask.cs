@@ -42,7 +42,7 @@ namespace SRNet
 			try
 			{
 				m_Socket = new UdpSocket();
-				m_Socket.Bind();
+				m_Socket.Bind(m_RemoteEP.AddressFamily);
 				m_SelfId = Random.GenInt();
 				if (m_Cookie == null)
 				{

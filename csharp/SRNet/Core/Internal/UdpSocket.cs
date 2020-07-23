@@ -24,9 +24,22 @@ namespace SRNet
 			Dispose();
 		}
 
+
 		public void Bind()
 		{
-			Bind(new IPEndPoint(IPAddress.Any, 0), false);
+			Bind(AddressFamily.InterNetwork);
+		}
+
+		public void Bind(AddressFamily addressFamily)
+		{
+			if (addressFamily == AddressFamily.InterNetworkV6)
+			{
+				Bind(new IPEndPoint(IPAddress.IPv6Any, 0), false);
+			}
+			else
+			{
+				Bind(new IPEndPoint(IPAddress.Any, 0), false);
+			}
 		}
 
 		public void Bind(IPEndPoint localEP, bool reuse)
