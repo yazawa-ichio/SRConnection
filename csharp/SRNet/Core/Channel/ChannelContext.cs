@@ -15,6 +15,7 @@ namespace SRNet.Channel
 	internal class ChannelContext : IChannelContext, IDisposable
 	{
 
+		bool m_InitRead;
 		ConnectionImpl m_Impl;
 		ConcurrentDictionary<int, Peer> m_Peers;
 		Dictionary<short, IChannel> m_Channels = new Dictionary<short, IChannel>();
@@ -24,6 +25,10 @@ namespace SRNet.Channel
 		int m_FragmentSize = Fragment.Size;
 		short m_FragmentId = 1;
 		byte[] m_ReceiveBuffer = new byte[Fragment.Size + 100];
+		Queue<Message> m_MessageCache = new Queue<Message>();
+		TimeSpan m_AutoReadTimer = TimeSpan.Zero;
+
+		public TimeSpan AutoReadTime = TimeSpan.FromMilliseconds(200);
 
 		byte[] IChannelContext.SharedSendBuffer { get; } = new byte[Fragment.Size + 100];
 
@@ -74,6 +79,14 @@ namespace SRNet.Channel
 				foreach (var channel in m_Channels.Values)
 				{
 					channel.Update(delta);
+				}
+			}
+			if (!m_InitRead)
+			{
+				m_AutoReadTimer -= delta;
+				if (m_AutoReadTimer < TimeSpan.Zero)
+				{
+					PreReadMessage();
 				}
 			}
 		}
@@ -127,49 +140,54 @@ namespace SRNet.Channel
 			}
 		}
 
-		public bool TryRead(out Message message)
+		void ResetAutoReadTime()
 		{
+			m_AutoReadTimer = AutoReadTime;
+		}
+
+		bool IChannelContext.Send(int connectionId, byte[] buf, int offset, int size, bool encrypt)
+		{
+			return m_Impl.Send(connectionId, buf, offset, size, encrypt);
+		}
+
+		public bool TryReadMessage(out Message message)
+		{
+			m_InitRead = true;
+			return TryReadMessageImpl(out message, false);
+		}
+
+		public void PreReadMessage()
+		{
+			TryReadMessageImpl(out _, true);
+		}
+
+		bool TryReadMessageImpl(out Message message, bool cache)
+		{
+			ResetAutoReadTime();
 			lock (m_ReceiveBuffer)
 			{
+				if (!cache && m_MessageCache.Count > 0)
+				{
+					message = m_MessageCache.Dequeue();
+					return true;
+				}
 				int size = 0;
 				int id = 0;
 				while (m_Impl.TryReceiveFrom(m_ReceiveBuffer, 0, ref size, ref id))
 				{
 					if (TryReadImpl(out message, id, m_ReceiveBuffer, size))
 					{
+						if (cache)
+						{
+							m_MessageCache.Enqueue(message.Copy());
+							continue;
+						}
 						return true;
 					}
 				}
 			}
 			message = default;
 			return false;
-		}
-
-		public bool TryPollRead(out Message message, int microSeconds, bool retryNoMessageIfReceive = true)
-		{
-			lock (m_ReceiveBuffer)
-			{
-				int size = 0;
-				int id = 0;
-				while (m_Impl.TryPollReceiveFrom(m_ReceiveBuffer, 0, ref size, ref id, microSeconds))
-				{
-					if (TryReadImpl(out message, id, m_ReceiveBuffer, size))
-					{
-						return true;
-					}
-					if (!retryNoMessageIfReceive)
-					{
-						break;
-					}
-				}
-			}
-			message = default;
-			return false;
-		}
-
-		bool IChannelContext.Send(int connectionId, byte[] buf, int offset, int size, bool encrypt)
-		{
-			return m_Impl.Send(connectionId, buf, offset, size, encrypt);
 		}
 
 		bool TryReadImpl(out Message message, int id, byte[] buf, int size)

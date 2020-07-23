@@ -84,7 +84,6 @@ namespace SRNet.Tests
 				using (var conn1 = await Connection.Connect(room))
 				using (var conn2 = await Connection.Connect(room))
 				{
-					await Task.WhenAll(conn1.WaitP2PConnectComplete(), conn2.WaitP2PConnectComplete());
 					for (int i = 0; i < 100; i++)
 					{
 						var text = "Text:" + (i + 1);
@@ -164,7 +163,6 @@ namespace SRNet.Tests
 		{
 			using (var conn = await Connection.P2PMatching("http://localhost:8080"))
 			{
-				await conn.WaitP2PConnectComplete();
 				bool success = false;
 				for (int i = 0; i < 10; i++)
 				{

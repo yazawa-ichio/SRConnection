@@ -181,11 +181,6 @@ namespace SRNet
 			m_Socket.Send(m_SendBuffer, 0, packetSize, peer.EndPoint);
 		}
 
-		internal void AddConnectPeerList(PeerInfo info)
-		{
-			throw new NotImplementedException();
-		}
-
 		protected virtual int GetSendId(int peerId)
 		{
 			return SelfId;
@@ -261,7 +256,7 @@ namespace SRNet
 		public bool TryReceiveFrom(byte[] buf, int offset, ref int size, ref int connectionId)
 		{
 			ArraySegment<byte> payload = default;
-			if (!ReceiveImpl(m_ReceiveBuffer, ref connectionId, ref payload, false, 0))
+			if (!ReceiveImpl(m_ReceiveBuffer, ref connectionId, ref payload))
 			{
 				return false;
 			}
@@ -271,29 +266,18 @@ namespace SRNet
 			return true;
 		}
 
-		public bool TryPollReceiveFrom(byte[] buf, int offset, ref int size, ref int connectionId, int microSeconds)
+		public bool Poll(int microSeconds)
 		{
-			Log.Trace("TryPollReceiveFrom microSeconds {0}", microSeconds);
-			ArraySegment<byte> payload = default;
-			if (!ReceiveImpl(m_ReceiveBuffer, ref connectionId, ref payload, true, microSeconds))
-			{
-				return false;
-			}
-			BinaryUtil.Write(payload, buf, ref offset);
-			size = payload.Count;
-			return size > 0;
+			Log.Trace("Poll microSeconds {0}", microSeconds);
+			return m_Socket.Poll(microSeconds, SelectMode.SelectRead);
 		}
 
-		bool ReceiveImpl(byte[] buf, ref int connectionId, ref ArraySegment<byte> ret, bool poll, int microSeconds)
+		bool ReceiveImpl(byte[] buf, ref int connectionId, ref ArraySegment<byte> ret)
 		{
 			var soket = m_Socket;
 			while (!m_Disposed)
 			{
 				IPEndPoint remoteEP = null;
-				if (poll && !soket.Poll(microSeconds, SelectMode.SelectRead))
-				{
-					return false;
-				}
 				var size = 0;
 				if (!soket.TryReceiveFrom(buf, ref size, ref remoteEP))
 				{

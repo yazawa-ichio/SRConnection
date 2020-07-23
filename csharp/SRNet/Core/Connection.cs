@@ -5,6 +5,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace SRNet
@@ -140,17 +141,21 @@ namespace SRNet
 
 		public bool TryReceive(out Message message)
 		{
-			return m_Channel.TryRead(out message);
+			return m_Channel.TryReadMessage(out message);
 		}
 
-		public bool TryPollReceive(out Message message, TimeSpan time, bool retryNoMessageIfReceive = true)
+		public bool TryPollReceive(out Message message, TimeSpan time)
 		{
-			return m_Channel.TryPollRead(out message, (int)(time.TotalMilliseconds * 1000), retryNoMessageIfReceive);
+			return TryPollReceive(out message, (int)(time.TotalMilliseconds * 1000));
 		}
 
-		public bool TryPollReceive(out Message message, int microSeconds, bool retryNoMessageIfReceive = true)
+		public bool TryPollReceive(out Message message, int microSeconds)
 		{
-			return m_Channel.TryPollRead(out message, microSeconds, retryNoMessageIfReceive);
+			if (TryReceive(out message))
+			{
+				return true;
+			}
+			return (m_Impl.Poll(microSeconds) && TryReceive(out message));
 		}
 
 		public void ConnectP2P(PeerInfo[] list, bool init = true)
@@ -160,22 +165,17 @@ namespace SRNet
 
 		public void AddConnectP2P(PeerInfo info)
 		{
-			m_Impl.AddConnectPeerList(info);
+			m_Impl.AddConnectPeer(info);
 		}
 
-		public async Task<Message[]> WaitP2PConnectComplete(bool runReceive = true)
+		public async Task WaitP2PConnectComplete(CancellationToken token = default)
 		{
-			List<Message> ret = new List<Message>();
 			var task = m_Impl.WaitP2PConnectComplete();
 			while (!task.IsCompleted)
 			{
-				while (runReceive && TryReceive(out var message))
-				{
-					ret.Add(message.Copy());
-				}
-				await Task.WhenAny(Task.Delay(100), task);
+				m_Channel.PreReadMessage();
+				await Task.WhenAny(task, Task.Delay(200, token));
 			}
-			return ret.ToArray();
 		}
 
 		public void CancelP2PHandshake(int connectionId)
