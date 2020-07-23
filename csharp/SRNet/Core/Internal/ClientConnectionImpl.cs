@@ -7,8 +7,6 @@
 
 		protected override bool UseP2P => AllowP2P;
 
-		public bool AutoDisposeOnDisconnectServer { get; set; } = true;
-
 		internal ClientConnectionImpl(int id, UdpSocket socket, ServerConnectSettings settings, Encryptor encryptor, EncryptorGenerator encryptorGenerator) : base(socket, encryptorGenerator)
 		{
 			SelfId = id;
@@ -25,7 +23,7 @@
 		internal protected override void OnRemove(PeerEntry peer)
 		{
 			base.OnRemove(peer);
-			if (AutoDisposeOnDisconnectServer && peer.ConnectionId == SelfId)
+			if (DisposeOnDisconnectOwner && peer.ConnectionId == SelfId)
 			{
 				Dispose();
 			}

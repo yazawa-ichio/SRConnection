@@ -42,6 +42,8 @@ namespace SRNet
 
 		public Action<DateTime, TimeSpan> OnPostTimerUpdate;
 
+		public bool DisposeOnDisconnectOwner = true;
+
 		internal ConnectionImpl(UdpSocket socket, EncryptorGenerator encryptorGenerator)
 		{
 			m_Socket = socket;

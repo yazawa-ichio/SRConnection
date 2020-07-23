@@ -22,6 +22,12 @@ namespace SRNet
 
 		public bool Disposed => m_Impl.Disposed;
 
+		public bool AutoDisposeOnDisconnectOwner
+		{
+			get => m_Impl.DisposeOnDisconnectOwner;
+			set => m_Impl.DisposeOnDisconnectOwner = value;
+		}
+
 		ConnectionImpl m_Impl;
 		Queue<PeerEvent> m_PeerEvent = new Queue<PeerEvent>();
 		ConcurrentDictionary<int, Peer> m_Peers = new ConcurrentDictionary<int, Peer>();

@@ -17,8 +17,6 @@ namespace SRNet
 
 		protected override bool UseP2P => true;
 
-		public bool DisposeOnDisconnectOwnder { get; set; } = true;
-
 		internal P2PConnectionImpl(LocalHostConfig config) : base(new UdpSocket(), new EncryptorGenerator())
 		{
 			m_IsOwner = true;
@@ -74,7 +72,7 @@ namespace SRNet
 		{
 			base.OnRemove(peer);
 			m_PeerToPeerListDirty = true;
-			if (DisposeOnDisconnectOwnder && m_Owner != null && m_Owner.ConnectionId == peer.ConnectionId)
+			if (DisposeOnDisconnectOwner && m_Owner != null && m_Owner.ConnectionId == peer.ConnectionId)
 			{
 				Dispose();
 			}
