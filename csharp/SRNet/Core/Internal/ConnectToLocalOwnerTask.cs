@@ -1,6 +1,7 @@
 ﻿using SRNet.Packet;
 using System;
 using System.Net;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace SRNet
@@ -27,14 +28,16 @@ namespace SRNet
 		int m_OwnerId;
 		byte[] m_Cookie;
 		byte[] m_Randam;
+		CancellationToken m_Token;
 
-		public ConnectToLocalOwnerTask(IPEndPoint remoteEP, PeerToPeerRoomData data, int holePunchRequestPort)
+		public ConnectToLocalOwnerTask(IPEndPoint remoteEP, PeerToPeerRoomData data, int holePunchRequestPort, CancellationToken token)
 		{
 			m_RemoteEP = remoteEP;
 			m_HolePunchRequestPort = holePunchRequestPort;
 			m_OwnerId = data.ConnectionId;
 			m_Cookie = data.Cookie;
 			m_Randam = data.Randam;
+			m_Token = token;
 		}
 
 		public async Task<P2PConnectionImpl> Run()
@@ -47,14 +50,17 @@ namespace SRNet
 				if (m_Cookie == null)
 				{
 					var buf = new PeerToPeerHello(m_SelfId, null).Pack();
-					var res = await new TimeoutRetryableRequester<PeerToPeerHello>(WaitHello(), () => Send(buf)).Run();
+					var res = await new TimeoutRetryableRequester<PeerToPeerHello>(WaitHello(), () => Send(buf), m_Token).Run();
 					m_OwnerId = res.ConnectionId;
 					m_Cookie = res.Cookie;
 				}
 				{
 					var buf = new PeerToPeerRequest(m_SelfId, m_Cookie).Pack();
-					var res = await new TimeoutRetryableRequester<HandshakeResult>(WaitHandshakeAccept(), () => Send(buf)).Run();
+					var res = await new TimeoutRetryableRequester<HandshakeResult>(WaitHandshakeAccept(), () => Send(buf), m_Token).Run();
 					var peer = new PeerEntry(m_OwnerId, 0, res.Encryptor, m_RemoteEP);
+
+					m_Token.ThrowIfCancellationRequested();
+
 					return new P2PConnectionImpl(m_SelfId, m_Socket, peer, m_EncryptorGenerator);
 				}
 			}

@@ -5,6 +5,7 @@ namespace SRNet
 {
 	using Packet;
 	using System.Security.Cryptography;
+	using System.Threading;
 
 	internal class ConnectToServerTask
 	{
@@ -26,11 +27,13 @@ namespace SRNet
 		EncryptorGenerator m_EncryptorGenerator = new EncryptorGenerator();
 		byte[] m_Randam;
 		EncryptorKey m_EncryptorKey;
+		CancellationToken m_Token;
 
-		public ConnectToServerTask(ServerConnectSettings settings)
+		public ConnectToServerTask(ServerConnectSettings settings, CancellationToken token)
 		{
 			m_Settings = settings;
 			m_Randam = Random.GenBytes(EncryptorKey.RandamKey);
+			m_Token = token;
 		}
 
 		public async Task<ClientConnectionImpl> Run()
@@ -47,7 +50,7 @@ namespace SRNet
 				if (m_Settings.Cookie == null)
 				{
 					var buf = new ClientHello(Protocol.MajorVersion, Protocol.MinorVersion).Pack();
-					var req = new TimeoutRetryableRequester<ServerHello>(WaitServerHello(), () => Send(buf));
+					var req = new TimeoutRetryableRequester<ServerHello>(WaitServerHello(), () => Send(buf), m_Token);
 					var res = await req.Run();
 					cookie = res.Cookie;
 				}
@@ -66,7 +69,9 @@ namespace SRNet
 
 					m_EncryptorKey = new EncryptorKey(request, payload, 0);
 
-					var res = await (new TimeoutRetryableRequester<HandshakeResult>(WaitHandshakeAccept(), () => Send(request.Pack()))).Run();
+					var res = await (new TimeoutRetryableRequester<HandshakeResult>(WaitHandshakeAccept(), () => Send(request.Pack()), m_Token)).Run();
+
+					m_Token.ThrowIfCancellationRequested();
 
 					return new ClientConnectionImpl(res.ConnectionId, m_Socket, m_Settings, res.Encryptor, m_EncryptorGenerator);
 

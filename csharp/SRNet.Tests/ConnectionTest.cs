@@ -72,7 +72,7 @@ namespace SRNet.Tests
 		[TestMethod, Timeout(10000)]
 		public async Task ローカルP2Pテスト()
 		{
-			using (var host = await Connection.StartLocalHost("TestRoom"))
+			using (var host = Connection.StartLocalHost("TestRoom"))
 			using (var server = new EchoServer(host))
 			{
 				DiscoveryRoom room = null;

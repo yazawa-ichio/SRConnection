@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Net;
 using System.Net.Sockets;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace SRNet.Stun
@@ -15,6 +16,7 @@ namespace SRNet.Stun
 		TimeSpan m_Timeout;
 		IPEndPoint m_RemoteEP;
 		Task<StunResult> m_RunTask;
+		CancellationToken m_Token;
 
 		public bool IsCompleted => m_RunTask?.IsCompleted ?? false;
 
@@ -47,8 +49,9 @@ namespace SRNet.Stun
 			return null;
 		}
 
-		public async Task<StunResult> Run()
+		public async Task<StunResult> Run(CancellationToken token)
 		{
+			m_Token = token;
 			if (m_RunTask != null) await m_RunTask;
 			m_RunTask = RunImpl();
 			Result = await m_RunTask;
@@ -142,11 +145,14 @@ namespace SRNet.Stun
 
 		async Task<StunMessage> DoTransaction(StunMessage request, IPEndPoint remoteEP)
 		{
+			m_Token.ThrowIfCancellationRequested();
+
 			if (m_Future != null) throw new Exception("already run");
 			m_Request = request;
 			byte[] buf = new byte[20];
 			var size = m_Request.Write(ref buf);
 			m_Future = new TaskCompletionSource<StunMessage>();
+
 			var timeoutAt = DateTime.UtcNow.Add(m_Timeout);
 			while (timeoutAt > DateTime.UtcNow)
 			{
@@ -154,7 +160,7 @@ namespace SRNet.Stun
 				{
 					m_Socket.SendTo(buf, size, SocketFlags.None, remoteEP);
 				}
-				await Task.WhenAny(m_Future.Task, Task.Delay(200));
+				await Task.WhenAny(m_Future.Task, Task.Delay(200, m_Token));
 				if (m_Future.Task.IsCompleted)
 				{
 					var ret = await m_Future.Task;

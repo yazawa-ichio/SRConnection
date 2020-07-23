@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace SRNet
@@ -11,11 +12,13 @@ namespace SRNet
 
 		Task<T> m_WaitResponse;
 		Action m_Request;
+		CancellationToken m_Token;
 
-		public TimeoutRetryableRequester(Task<T> waitResponse, Action request)
+		public TimeoutRetryableRequester(Task<T> waitResponse, Action request, CancellationToken token)
 		{
 			m_WaitResponse = waitResponse;
 			m_Request = request;
+			m_Token = token;
 		}
 
 		public async Task<T> Run()
@@ -24,7 +27,7 @@ namespace SRNet
 			for (int i = 0; i < Count; i++)
 			{
 				m_Request();
-				await Task.WhenAny(task, Task.Delay(Time));
+				await Task.WhenAny(task, Task.Delay(Time, m_Token));
 				if (task.IsCompleted)
 				{
 					if (task.IsFaulted)
