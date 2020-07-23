@@ -9,6 +9,7 @@ namespace SRNet
 	public class ServerConnectSettings
 	{
 		public IPEndPoint EndPoint { get; set; }
+		public bool UseP2P { get; set; }
 		public RSA RSA { get; set; }
 		public byte[] Cookie { get; set; }
 

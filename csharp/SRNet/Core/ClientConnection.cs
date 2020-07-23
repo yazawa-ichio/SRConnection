@@ -6,7 +6,7 @@
 
 		public Peer Server { get; private set; }
 
-		public bool AllowP2P { get => m_ClientImpl.AllowP2P; set => m_ClientImpl.AllowP2P = value; }
+		public bool AllowP2P => m_ClientImpl.AllowP2P;
 
 		internal ClientConnection(ClientConnectionImpl impl) : base(impl)
 		{

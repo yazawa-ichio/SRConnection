@@ -57,6 +57,11 @@ namespace SRNet
 			m_RemoteEP = new IPEndPoint(m_Socket.AddressFamily == AddressFamily.InterNetwork ? IPAddress.Any : IPAddress.IPv6Any, 0);
 		}
 
+		public void Connect(IPEndPoint endPoint)
+		{
+			m_Socket.Connect(endPoint);
+		}
+
 		public bool TryReceiveFrom(byte[] buffer, ref int size, ref IPEndPoint remoteEP)
 		{
 			while (true)

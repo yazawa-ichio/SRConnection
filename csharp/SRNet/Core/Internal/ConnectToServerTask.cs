@@ -39,6 +39,10 @@ namespace SRNet
 			{
 				m_Socket = new UdpSocket();
 				m_Socket.Bind(m_Settings.EndPoint.AddressFamily);
+				if (!m_Settings.UseP2P)
+				{
+					m_Socket.Connect(m_Settings.EndPoint);
+				}
 				byte[] cookie;
 				if (m_Settings.Cookie == null)
 				{
@@ -64,7 +68,7 @@ namespace SRNet
 
 					var res = await (new TimeoutRetryableRequester<HandshakeResult>(WaitHandshakeAccept(), () => Send(request.Pack()))).Run();
 
-					return new ClientConnectionImpl(res.ConnectionId, m_Socket, m_Settings.EndPoint, res.Encryptor, m_EncryptorGenerator);
+					return new ClientConnectionImpl(res.ConnectionId, m_Socket, m_Settings, res.Encryptor, m_EncryptorGenerator);
 
 				}
 			}
