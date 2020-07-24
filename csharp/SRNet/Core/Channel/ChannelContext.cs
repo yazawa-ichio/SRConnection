@@ -234,9 +234,14 @@ namespace SRNet.Channel
 			ResetAutoReadTime();
 			lock (m_ReceiveBuffer)
 			{
-				if (!buffering && m_BufferingMessage.Count > 0)
+				while (!buffering && m_BufferingMessage.Count > 0)
 				{
 					message = m_BufferingMessage.Dequeue();
+					//切断済みのPeerのメッセージは飛ばさない
+					if (!m_Peers.ContainsKey(message.Peer.ConnectionId))
+					{
+						continue;
+					}
 					return true;
 				}
 				int size = 0;

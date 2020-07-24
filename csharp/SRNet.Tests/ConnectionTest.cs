@@ -91,21 +91,22 @@ namespace SRNet.Tests
 			using (var server = new EchoServer())
 			using (var conn = await Connection.Connect(server.GetConnectSettings()))
 			{
-				Assert.IsTrue(server.Conn.TryGetPeerEvent(out var e));
+				Assert.IsTrue(server.PeerEvents.Count > 0);
+				Assert.IsTrue(server.PeerEvents.TryDequeue(out var e));
 				Assert.AreEqual(e.EventType, PeerEvent.Type.Add);
 				Assert.AreEqual(e.Peer.ConnectionId, conn.SelfId);
 				conn.Dispose();
 				while (true)
 				{
 					await Task.Delay(100);
-					if (server.Conn.TryGetPeerEvent(out e))
+					if (server.PeerEvents.Count > 0)
 					{
+						Assert.IsTrue(server.PeerEvents.TryDequeue(out e));
 						Assert.AreEqual(e.EventType, PeerEvent.Type.Remove);
 						Assert.AreEqual(e.Peer.ConnectionId, conn.SelfId);
 						break;
 					}
 				}
-
 				Assert.AreEqual(server.Conn.Peers.Count, 0);
 			}
 		}
