@@ -59,6 +59,8 @@ namespace SRNet
 					cookie = m_Settings.Cookie;
 				}
 				{
+					m_Token.ThrowIfCancellationRequested();
+
 					var payload = new HandshakeRequestPayload(Random.GenInt(), m_Randam);
 					byte[] payloadBuf = payload.Pack();
 					if (m_Settings.RSA != null)

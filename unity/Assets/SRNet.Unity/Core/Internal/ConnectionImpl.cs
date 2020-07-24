@@ -438,10 +438,7 @@ namespace SRNet
 			if (PeerToPeerRequest.TryUnpack(m_CookieProvider, buf, size, out var packet))
 			{
 				Log.Debug("receive p2p request {0}", remoteEP);
-				lock (m_PeerManager)
-				{
-					m_P2PTaskManager.HandshakeAccept(packet, remoteEP);
-				}
+				m_P2PTaskManager.HandshakeAccept(packet, remoteEP);
 			}
 			else
 			{
@@ -452,10 +449,7 @@ namespace SRNet
 		void OnPeerToPeerAccept(byte[] buf, int size, IPEndPoint remoteEP)
 		{
 			Log.Debug("receive p2p accept {0}", remoteEP);
-			lock (m_PeerManager)
-			{
-				m_P2PTaskManager.HandshakeComplete(buf, size, remoteEP);
-			}
+			m_P2PTaskManager.HandshakeComplete(buf, size, remoteEP);
 		}
 
 		protected virtual void OnPeerToPeerHello(byte[] buf, int size, IPEndPoint remoteEP)
@@ -465,10 +459,7 @@ namespace SRNet
 			if (PeerToPeerHello.TryUnpack(buf, size, out var packet))
 			{
 				Log.Debug("receive p2p hello {0}", remoteEP);
-				lock (m_PeerManager)
-				{
-					m_P2PTaskManager.OnPeerToPeerHello(packet, remoteEP);
-				}
+				m_P2PTaskManager.OnPeerToPeerHello(packet, remoteEP);
 			}
 			else
 			{
@@ -479,45 +470,30 @@ namespace SRNet
 		protected virtual void OnPeerToPeerList(byte[] buf, int size, IPEndPoint remoteEP)
 		{
 			if (IsHost || !UseP2P) return;
-			lock (m_PeerManager)
-			{
-				m_P2PTaskManager.OnPeerToPeerList(buf, size);
-			}
+			m_P2PTaskManager.OnPeerToPeerList(buf, size);
 		}
 
 		public void UpdateConnectPeerList(PeerInfo[] list, bool init)
 		{
 			Log.Debug("Update Connect PeerList {0}", list.Length);
-			lock (m_PeerManager)
-			{
-				m_P2PTaskManager.UpdateList(list, init);
-			}
+			m_P2PTaskManager.UpdateList(list, init);
 		}
 
 		public void AddConnectPeer(PeerInfo info)
 		{
 			Log.Debug("Add Connect Peer id{0}, {1}, {2}", info.ConnectionId, info.EndPont, info.LocalEndPont);
-			lock (m_PeerManager)
-			{
-				m_P2PTaskManager.Add(info);
-			}
+			m_P2PTaskManager.Add(info);
 		}
 
 		public void CancelP2PHandshake(int connectionId)
 		{
-			lock (m_PeerManager)
-			{
-				m_P2PTaskManager.Remove(connectionId);
-			}
+			m_P2PTaskManager.Remove(connectionId);
 		}
 
-		public Task WaitHandshake()
+		public Task WaitHandshake(CancellationToken token)
 		{
 			Log.Debug("Start WaitP2PConnectComplete");
-			lock (m_PeerManager)
-			{
-				return m_P2PTaskManager.WaitTaskComplete();
-			}
+			return m_P2PTaskManager.WaitTaskComplete(token);
 		}
 
 		public Task<StunResult> StunQuery(string host, int port, TimeSpan timeout)

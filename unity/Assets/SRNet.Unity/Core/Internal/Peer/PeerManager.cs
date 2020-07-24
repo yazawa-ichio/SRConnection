@@ -96,7 +96,10 @@ namespace SRNet
 					{
 						action?.Invoke(peer, obj);
 					}
-					catch { }
+					catch (Exception ex)
+					{
+						Log.Warning("foreach error {0} : {1}", peer.ConnectionId, ex);
+					}
 				}
 			}
 		}
@@ -111,7 +114,10 @@ namespace SRNet
 					{
 						action?.Invoke(peer);
 					}
-					catch { }
+					catch (Exception ex)
+					{
+						Log.Warning("foreach error {0} : {1}", peer.ConnectionId, ex);
+					}
 				}
 			}
 		}

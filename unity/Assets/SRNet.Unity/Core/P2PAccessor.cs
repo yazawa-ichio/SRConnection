@@ -28,14 +28,10 @@ namespace SRNet
 			m_Impl.AddConnectPeer(info);
 		}
 
-		public async Task WaitHandshake(CancellationToken token = default)
+		public Task WaitHandshake(CancellationToken token = default)
 		{
-			var task = m_Impl.WaitHandshake();
-			while (!task.IsCompleted)
-			{
-				m_Channel.PreReadMessage();
-				await Task.WhenAny(task, Task.Delay(200, token));
-			}
+			token.ThrowIfCancellationRequested();
+			return m_Impl.WaitHandshake(token);
 		}
 
 		public void Cancel(int connectionId)
