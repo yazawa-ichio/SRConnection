@@ -1,11 +1,7 @@
 ﻿using SRNet.Channel;
-using SRNet.Packet;
-using SRNet.Stun;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace SRNet
 {
@@ -38,6 +34,8 @@ namespace SRNet
 
 		public ConnectionChannelAccessor Unreliable => Channel(DefaultChannel.Unreliable);
 
+		public P2PAccessor P2P { get; private set; }
+
 		internal Connection(ConnectionImpl impl)
 		{
 			m_Channel = new ChannelContext(impl, m_Peers);
@@ -50,6 +48,10 @@ namespace SRNet
 			foreach (var peer in m_Impl.GetPeers())
 			{
 				OnAdd(peer);
+			}
+			if (impl.UseP2P)
+			{
+				P2P = new P2PAccessor(m_Impl, m_Channel);
 			}
 		}
 
@@ -162,40 +164,6 @@ namespace SRNet
 			return (m_Impl.Poll(microSeconds) && TryReceive(out message));
 		}
 
-		public void ConnectP2P(PeerInfo[] list, bool init = true)
-		{
-			m_Impl.UpdateConnectPeerList(list, init);
-		}
-
-		public void AddConnectP2P(PeerInfo info)
-		{
-			m_Impl.AddConnectPeer(info);
-		}
-
-		public async Task WaitP2PConnectComplete(CancellationToken token = default)
-		{
-			var task = m_Impl.WaitP2PConnectComplete();
-			while (!task.IsCompleted)
-			{
-				m_Channel.PreReadMessage();
-				await Task.WhenAny(task, Task.Delay(200, token));
-			}
-		}
-
-		public void CancelP2PHandshake(int connectionId)
-		{
-			m_Impl.CancelP2PHandshake(connectionId);
-		}
-
-		public void CancelP2PHandshake()
-		{
-			m_Impl.UpdateConnectPeerList(Array.Empty<PeerInfo>(), true);
-		}
-
-		public Task<StunResult> StunQuery(string host, int port, TimeSpan timeout)
-		{
-			return m_Impl.StunQuery(host, port, timeout);
-		}
 
 		void OnAdd(PeerEntry entry)
 		{

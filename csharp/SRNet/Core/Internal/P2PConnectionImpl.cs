@@ -15,7 +15,7 @@ namespace SRNet
 
 		protected override bool IsHost => m_IsOwner;
 
-		protected override bool UseP2P => true;
+		public override bool UseP2P => true;
 
 		internal P2PConnectionImpl(LocalHostConfig config) : base(new UdpSocket(), new EncryptorGenerator())
 		{

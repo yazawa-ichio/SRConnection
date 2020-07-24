@@ -69,7 +69,7 @@ namespace SRNet
 			{
 				try
 				{
-					await conn.WaitP2PConnectComplete(token);
+					await conn.P2P.WaitHandshake(token);
 				}
 				catch (Exception)
 				{

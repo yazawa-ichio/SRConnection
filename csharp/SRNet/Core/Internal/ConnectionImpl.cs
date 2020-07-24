@@ -19,7 +19,7 @@ namespace SRNet
 
 		protected virtual bool IsHost => false;
 
-		protected virtual bool UseP2P => false;
+		public virtual bool UseP2P => false;
 
 		public int SelfId { get; protected set; }
 
@@ -495,7 +495,7 @@ namespace SRNet
 			}
 		}
 
-		public Task WaitP2PConnectComplete()
+		public Task WaitHandshake()
 		{
 			Log.Debug("Start WaitP2PConnectComplete");
 			lock (m_PeerManager)
