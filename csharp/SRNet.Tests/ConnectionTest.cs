@@ -1,6 +1,7 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace SRNet.Tests
@@ -9,6 +10,12 @@ namespace SRNet.Tests
 	[TestClass]
 	public class ConnectionTest
 	{
+		public ConnectionTest()
+		{
+			Log.Init();
+			Log.Level = Log.LogLevel.Trace;
+		}
+
 		byte[] To(string text)
 		{
 			return System.Text.Encoding.UTF8.GetBytes(text);
@@ -40,12 +47,47 @@ namespace SRNet.Tests
 			}
 		}
 
+		[TestMethod, Timeout(50000)]
+		public async Task サーバーランダムテスト()
+		{
+			using (var server = new EchoServer())
+			{
+				List<Task> tasks = new List<Task>();
+				for (int i = 0; i < 1000; i++)
+				{
+					tasks.Add(RandamServerRequest(server.GetConnectSettings()));
+				}
+				await Task.WhenAll(tasks.ToArray());
+			}
+		}
+
+		Task RandamServerRequest(ServerConnectSettings settings)
+		{
+			return Task.Run(async () =>
+			{
+				try
+				{
+					var start = DateTime.Now;
+					using (var conn = await Connection.Connect(settings))
+					{
+						while ((DateTime.Now - start) < TimeSpan.FromSeconds(1))
+						{
+							await Task.Delay(100);
+							var randam = System.Convert.ToBase64String(Random.GenBytes(1000));
+							conn.Server.Send(To(randam));
+							Message message;
+							while (!conn.TryPollReceive(out message, TimeSpan.FromSeconds(1))) ;
+							Assert.AreEqual(randam, To(message));
+						}
+					};
+				}
+				catch { }
+			});
+		}
 
 		[TestMethod, Timeout(50000)]
 		public async Task ユーザー切断テスト()
 		{
-			Log.Init();
-			Log.Level = Log.LogLevel.Trace;
 			using (var server = new EchoServer())
 			using (var conn = await Connection.Connect(server.GetConnectSettings()))
 			{
@@ -68,6 +110,92 @@ namespace SRNet.Tests
 			}
 		}
 
+		[TestMethod, Timeout(10000)]
+		public async Task サーバー切断テスト()
+		{
+			using (var server = new EchoServer())
+			using (var conn1 = await Connection.Connect(server.GetConnectSettings()))
+			using (var conn2 = await Connection.Connect(server.GetConnectSettings()))
+			using (var conn3 = await Connection.Connect(server.GetConnectSettings()))
+			{
+				string sendmessage = "サーバー切断テスト";
+				server.Conn.Reliable.Broadcast(To(sendmessage));
+				server.Dispose();
+				string msg1 = null;
+				string msg2 = null;
+				string msg3 = null;
+				while (!conn1.Disposed)
+				{
+					if (conn1.TryReceive(out var m))
+					{
+						Assert.IsNull(msg1);
+						msg1 = To(m);
+					}
+				}
+				while (!conn2.Disposed)
+				{
+					if (conn2.TryReceive(out var m))
+					{
+						Assert.IsNull(msg2);
+						msg2 = To(m);
+					}
+				}
+				while (!conn3.Disposed)
+				{
+					if (conn3.TryReceive(out var m))
+					{
+						Assert.IsNull(msg3);
+						msg3 = To(m);
+					}
+				}
+				Assert.AreEqual(sendmessage, msg1);
+				Assert.AreEqual(sendmessage, msg2);
+				Assert.AreEqual(sendmessage, msg3);
+			}
+		}
+
+		[TestMethod, Timeout(10000)]
+		public async Task アクセサテスト()
+		{
+			using (var server = new EchoServer())
+			using (var conn = await Connection.Connect(server.GetConnectSettings()))
+			{
+				server.Conn.Reliable.Target(conn.SelfId).Send(To("PeerChannelAccessor"));
+
+				Message message;
+				while (!conn.TryPollReceive(out message, TimeSpan.FromSeconds(1))) ;
+				Assert.AreEqual("PeerChannelAccessor", To(message), "PeerChannelAccessor経由で送信");
+				Assert.AreEqual(DefaultChannel.Reliable, message.ChannelId, "PeerChannelAccessor経由で送信");
+
+				message.PeerChannel.Send(To("Message.PeerChannelAccessor"));
+				while (!conn.TryPollReceive(out message, TimeSpan.FromSeconds(1))) ;
+				Assert.AreEqual("Message.PeerChannelAccessor", To(message), "MessageのPeerChannelAccessor経由で送信。エコーが返る");
+
+
+			}
+		}
+
+		[TestMethod, Timeout(10000)]
+		public async Task クライアントキャンセルテスト()
+		{
+			using (var server = new EchoServer())
+			{
+				await Assert.ThrowsExceptionAsync<OperationCanceledException>(() =>
+				{
+					var cancellationTokenSource = new CancellationTokenSource();
+					cancellationTokenSource.Cancel();
+					return Connection.Connect(server.GetConnectSettings(), cancellationTokenSource.Token);
+				}, "即時キャンセルの場合");
+				await Assert.ThrowsExceptionAsync<OperationCanceledException>(async () =>
+				{
+					var cancellationTokenSource = new CancellationTokenSource();
+					var task = Connection.Connect(server.GetConnectSettings(), cancellationTokenSource.Token);
+					await Task.Yield();
+					cancellationTokenSource.Cancel();
+					await task;
+				}, "即時キャンセルではない場合");
+			}
+		}
 
 		[TestMethod, Timeout(10000)]
 		public async Task ローカルP2Pテスト()
@@ -122,6 +250,35 @@ namespace SRNet.Tests
 			}
 		}
 
+		[TestMethod, Timeout(10000)]
+		public async Task ローカルP2Pキャンセルテスト()
+		{
+			using (var host = Connection.StartLocalHost("TestRoom"))
+			using (var server = new EchoServer(host))
+			{
+				DiscoveryRoom room = null;
+				using (var discovery = new DiscoveryClient())
+				{
+					discovery.Start();
+					room = await discovery.GetRoomAsync("TestRoom");
+				}
+				await Assert.ThrowsExceptionAsync<OperationCanceledException>(() =>
+				{
+					var cancellationTokenSource = new CancellationTokenSource();
+					cancellationTokenSource.Cancel();
+					return Connection.Connect(room, token: cancellationTokenSource.Token);
+				}, "即時キャンセルの場合");
+				await Assert.ThrowsExceptionAsync<OperationCanceledException>(async () =>
+				{
+					var cancellationTokenSource = new CancellationTokenSource();
+					var task = Connection.Connect(room, token: cancellationTokenSource.Token);
+					await Task.Yield();
+					cancellationTokenSource.Cancel();
+					await task;
+				}, "即時キャンセルではない場合");
+			}
+		}
+
 		[TestMethod, Timeout(30000)]
 		public async Task HttpマッチングP2Pテスト()
 		{
@@ -151,6 +308,26 @@ namespace SRNet.Tests
 			}
 		}
 
+		[TestMethod, Timeout(30000)]
+		public async Task Httpマッチングキャンセルテスト()
+		{
+			using (var matching = new TestMatchingServer())
+			{
+				matching.Start();
+				await Assert.ThrowsExceptionAsync<OperationCanceledException>(async () =>
+				{
+					CancellationTokenSource source = new CancellationTokenSource();
+					source.Cancel();
+					await P2PTestConn(source.Token);
+				}, "即時キャンセルの場合");
+				await Assert.ThrowsExceptionAsync<TaskCanceledException>(async () =>
+				{
+					CancellationTokenSource source = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
+					await P2PTestConn(source.Token);
+				}, "即時キャンセルではない場合");
+			}
+		}
+
 		IEnumerable<Task> GetConn(int num)
 		{
 			for (int i = 0; i < num; i++)
@@ -159,9 +336,9 @@ namespace SRNet.Tests
 			}
 		}
 
-		async Task P2PTestConn()
+		async Task P2PTestConn(CancellationToken token = default)
 		{
-			using (var conn = await Connection.P2PMatching("http://localhost:8080"))
+			using (var conn = await Connection.P2PMatching("http://localhost:8080", token: token))
 			{
 				bool success = false;
 				for (int i = 0; i < 10; i++)
