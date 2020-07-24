@@ -15,7 +15,15 @@ namespace SRNet
 			}
 		}
 
-		public short Channel
+		public ChannelAccessor Channel
+		{
+			get
+			{
+				return PeerChannel.Parent;
+			}
+		}
+
+		public short ChannelId
 		{
 			get
 			{
@@ -29,15 +37,6 @@ namespace SRNet
 			get
 			{
 				return Peer.Channel(m_Reader.Channel);
-			}
-		}
-
-
-		public ConnectionChannelAccessor ConnectionChannel
-		{
-			get
-			{
-				return PeerChannel.Parent;
 			}
 		}
 

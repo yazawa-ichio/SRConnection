@@ -5,21 +5,9 @@ using System.Collections.Generic;
 
 namespace SRNet
 {
-	public static class DefaultChannel
-	{
-		public const short Reliable = 1;
-		public const short Unreliable = 2;
-	}
 
 	public partial class Connection : IDisposable
 	{
-
-
-		ConnectionImpl m_Impl;
-		Queue<PeerEvent> m_PeerEvent = new Queue<PeerEvent>();
-		ConcurrentDictionary<int, Peer> m_Peers = new ConcurrentDictionary<int, Peer>();
-		ChannelContext m_Channel;
-
 		public int SelfId => m_Impl.SelfId;
 
 		public bool Disposed => m_Impl.Disposed;
@@ -30,17 +18,27 @@ namespace SRNet
 			set => m_Impl.DisposeOnDisconnectOwner = value;
 		}
 
-		public ConnectionChannelAccessor Reliable => Channel(DefaultChannel.Reliable);
+		public ICollection<Peer> Peers => m_Peers.Values;
 
-		public ConnectionChannelAccessor Unreliable => Channel(DefaultChannel.Unreliable);
+		public ChannelMapAccessor Channel { get; private set; }
+
+		public readonly ChannelAccessor Reliable;
+
+		public readonly ChannelAccessor Unreliable;
 
 		public P2PAccessor P2P { get; private set; }
 
+		ConnectionImpl m_Impl;
+		Queue<PeerEvent> m_PeerEvent = new Queue<PeerEvent>();
+		ConcurrentDictionary<int, Peer> m_Peers = new ConcurrentDictionary<int, Peer>();
+		ChannelContext m_ChannelContext;
+
 		internal Connection(ConnectionImpl impl)
 		{
-			m_Channel = new ChannelContext(impl, m_Peers);
-			m_Channel.Bind(DefaultChannel.Reliable, new ReliableChannelConfig());
-			m_Channel.Bind(DefaultChannel.Unreliable, new UnreliableChannelConfig());
+			m_ChannelContext = new ChannelContext(impl, m_Peers);
+			Channel = new ChannelMapAccessor(m_ChannelContext);
+			Reliable = Channel.Reliable;
+			Unreliable = Channel.Unreliable;
 			m_Impl = impl;
 			m_Impl.OnAddPeer += OnAdd;
 			m_Impl.OnRemotePeer += OnRemote;
@@ -51,18 +49,18 @@ namespace SRNet
 			}
 			if (impl.UseP2P)
 			{
-				P2P = new P2PAccessor(m_Impl, m_Channel);
+				P2P = new P2PAccessor(m_Impl, m_ChannelContext);
 			}
 		}
 
 		void OnPostTimerUpdate(DateTime now, TimeSpan delta)
 		{
-			m_Channel.Update(delta);
+			m_ChannelContext.Update(delta);
 		}
 
 		public void Dispose()
 		{
-			m_Channel.Dispose();
+			m_ChannelContext.Dispose();
 			m_Impl.Dispose();
 		}
 
@@ -101,33 +99,6 @@ namespace SRNet
 			return m_Peers.TryGetValue(id, out peer);
 		}
 
-		public ICollection<Peer> GetPeers()
-		{
-			return m_Peers.Values;
-		}
-
-		public T BindChannel<T>(short id, Action<T> action = null) where T : IConfig, new()
-		{
-			T config = new T();
-			action?.Invoke(config);
-			BindChannel(id, config);
-			return config;
-		}
-
-		public void BindChannel(short id, IConfig config)
-		{
-			if (id <= 100) throw new ArgumentException("user channel is greater than 100", nameof(id));
-			m_Channel.Bind(id, config);
-		}
-
-		public void UnbindChannel(short id)
-		{
-			if (id <= 100) throw new ArgumentException("user channel is greater than 100", nameof(id));
-			m_Channel.Unbind(id);
-		}
-
-		public ConnectionChannelAccessor Channel(short channel) => new ConnectionChannelAccessor(channel, m_Channel);
-
 		public void Send(int connectionId, byte[] buf, bool reliable = true)
 		{
 			Send(connectionId, buf, 0, buf.Length, reliable);
@@ -136,7 +107,7 @@ namespace SRNet
 		public void Send(int connectionId, byte[] buf, int offset, int size, bool reliable = true)
 		{
 			var channel = reliable ? DefaultChannel.Unreliable : DefaultChannel.Unreliable;
-			m_Channel.Send(channel, connectionId, buf, offset, size);
+			m_ChannelContext.Send(channel, connectionId, buf, offset, size);
 		}
 
 		public void BroadcastDisconnect()
@@ -147,7 +118,7 @@ namespace SRNet
 
 		public bool TryReceive(out Message message)
 		{
-			return m_Channel.TryReadMessage(out message);
+			return m_ChannelContext.TryReadMessage(out message);
 		}
 
 		public bool TryPollReceive(out Message message, TimeSpan time)
@@ -169,7 +140,7 @@ namespace SRNet
 		{
 			lock (m_PeerEvent)
 			{
-				var peer = new Peer(entry, m_Impl, m_Channel);
+				var peer = new Peer(entry, m_Impl, m_ChannelContext);
 				m_Peers.TryAdd(peer.ConnectionId, peer);
 				if (m_HandlePeerEvent)
 				{

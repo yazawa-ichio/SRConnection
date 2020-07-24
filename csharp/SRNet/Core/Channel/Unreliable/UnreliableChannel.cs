@@ -10,6 +10,8 @@ namespace SRNet.Channel
 		Dictionary<int, UnreliableFlowControl> m_FlowControls = new Dictionary<int, UnreliableFlowControl>();
 		UnreliableChannelConfig m_Config;
 
+		IConfig IChannel.Config => m_Config;
+
 		public UnreliableChannel(UnreliableChannelConfig config)
 		{
 			m_Config = config;

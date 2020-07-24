@@ -64,7 +64,7 @@ namespace SRNet.Tests
 					}
 				}
 
-				Assert.AreEqual(server.Conn.GetPeers().Count, 0);
+				Assert.AreEqual(server.Conn.Peers.Count, 0);
 			}
 		}
 
@@ -167,10 +167,7 @@ namespace SRNet.Tests
 				for (int i = 0; i < 10; i++)
 				{
 					await Task.Delay(100);
-					foreach (var peer in conn.GetPeers())
-					{
-						peer.Send(System.Text.Encoding.UTF8.GetBytes("Message" + DateTime.Now));
-					}
+					conn.Reliable.Broadcast(System.Text.Encoding.UTF8.GetBytes("Message" + DateTime.Now));
 					while (conn.TryReceive(out var _))
 					{
 						success = true;

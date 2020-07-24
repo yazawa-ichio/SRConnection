@@ -40,7 +40,7 @@ namespace SRNet
 
 		public PeerChannelAccessor Channel(short channel) => new PeerChannelAccessor(channel, m_Entry.ConnectionId, m_Channel);
 
-		internal ConnectionChannelAccessor ConnectionChannel(short channel) => new ConnectionChannelAccessor(channel, m_Channel);
+		internal ChannelAccessor ConnectionChannel(short channel) => new ChannelAccessor(channel, m_Channel);
 
 		public bool SendPing()
 		{

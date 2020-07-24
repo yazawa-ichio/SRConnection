@@ -60,6 +60,22 @@ namespace SRNet.Channel
 			}
 		}
 
+		public bool Contains(short id)
+		{
+			lock (m_Channels)
+			{
+				return m_Channels.ContainsKey(id);
+			}
+		}
+
+		public IConfig GetConfig(short id)
+		{
+			lock (m_Channels)
+			{
+				return m_Channels[id].Config;
+			}
+		}
+
 		public void Dispose()
 		{
 			lock (m_Channels)

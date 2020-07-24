@@ -3,12 +3,12 @@ using System.IO;
 
 namespace SRNet.Channel
 {
-	public readonly struct ConnectionChannelAccessor
+	public readonly struct ChannelAccessor
 	{
 		public readonly short Id;
 		readonly ChannelContext m_Context;
 
-		internal ConnectionChannelAccessor(short channel, ChannelContext context)
+		internal ChannelAccessor(short channel, ChannelContext context)
 		{
 			Id = channel;
 			m_Context = context;
@@ -39,7 +39,7 @@ namespace SRNet.Channel
 			m_Context.Broadcast(Id, write, obj);
 		}
 
-		public static implicit operator short(ConnectionChannelAccessor channel)
+		public static implicit operator short(ChannelAccessor channel)
 		{
 			return channel.Id;
 		}

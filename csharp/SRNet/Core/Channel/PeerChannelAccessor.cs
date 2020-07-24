@@ -9,7 +9,7 @@ namespace SRNet.Channel
 		readonly int m_ConnectionId;
 		readonly ChannelContext m_Context;
 
-		public ConnectionChannelAccessor Parent => new ConnectionChannelAccessor(Channel, m_Context);
+		public ChannelAccessor Parent => new ChannelAccessor(Channel, m_Context);
 
 		internal PeerChannelAccessor(short channel, int connectionId, ChannelContext context)
 		{
