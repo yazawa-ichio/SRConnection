@@ -277,7 +277,11 @@ namespace SRNet
 				{
 					return Task.FromResult(true);
 				}
-				var future = new TaskCompletionSource<bool>(token);
+				var future = new TaskCompletionSource<bool>();
+				if (default != token)
+				{
+					token.Register(() => future.TrySetCanceled(token));
+				}
 				m_Complete.Enqueue(() =>
 				{
 					future.TrySetResult(true);
