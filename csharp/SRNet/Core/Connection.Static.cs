@@ -34,9 +34,7 @@ namespace SRNet
 
 		public static Task<Connection> Connect(DiscoveryRoom room) => Connect(room, true, CancellationToken.None);
 
-		public static Task<Connection> Connect(DiscoveryRoom room, bool waitAllHandshake) => Connect(room, waitAllHandshake, CancellationToken.None);
-
-		public static async Task<Connection> Connect(DiscoveryRoom room, bool waitAllHandshake, CancellationToken token)
+		public static async Task<Connection> Connect(DiscoveryRoom room, bool waitAllHandshake = true, CancellationToken token = default)
 		{
 			var remoteEP = new IPEndPoint(room.Address, room.Port);
 			if (!PeerToPeerRoomData.TryUnpack(room.Data, room.Data.Length, out var data))

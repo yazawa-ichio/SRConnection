@@ -31,6 +31,7 @@ namespace SRNet
 
 		protected override void Dispose(bool disposing)
 		{
+			BroadcastDisconnect();
 			m_RSA?.Dispose();
 			m_RSA = null;
 			m_IdGenerator.Dispose();

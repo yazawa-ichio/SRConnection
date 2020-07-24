@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace SRNet
@@ -89,30 +90,33 @@ namespace SRNet
 
 		public void HandshakeAccept(PeerToPeerRequest packet, IPEndPoint remoteEP)
 		{
-			if (!m_PeerManager.TryGetValue(packet.ConnectionId, out var peer))
+			lock (m_ConnectToPeerTaskList)
 			{
-				int nonce = Random.GenInt();
-				var randamKey = m_RandamKey ?? GetPeerRandamKey(packet.ConnectionId);
-				var key = new EncryptorKey(packet, randamKey, nonce);
-				var encryptor = m_EncryptorGenerator.Generate(in key);
-				peer = new PeerEntry(packet.ConnectionId, nonce, encryptor, remoteEP);
-				m_PeerManager.Add(peer);
-				m_Connection.SendPeerToPeerList();
-			}
-			lock (m_Connection.m_Socket)
-			{
-				if (m_Connection.TryGetPeerToPeerList(out var list))
+				if (!m_PeerManager.TryGetValue(packet.ConnectionId, out var peer))
 				{
-					var size = new PeerToPeerAccept(m_Connection.SelfId, peer.ClientConnectionId, list).Pack(m_Connection.m_SendBuffer, peer.Encryptor);
-					m_Connection.m_Socket.Send(m_Connection.m_SendBuffer, 0, size, remoteEP);
+					int nonce = Random.GenInt();
+					var randamKey = m_RandamKey ?? GetPeerRandamKey(packet.ConnectionId);
+					var key = new EncryptorKey(packet, randamKey, nonce);
+					var encryptor = m_EncryptorGenerator.Generate(in key);
+					peer = new PeerEntry(packet.ConnectionId, nonce, encryptor, remoteEP);
+					m_PeerManager.Add(peer);
+					m_Connection.SendPeerToPeerList();
 				}
-				else
+				lock (m_Connection.m_Socket)
 				{
-					var size = new PeerToPeerAccept(m_Connection.SelfId, peer.ClientConnectionId).Pack(m_Connection.m_SendBuffer, peer.Encryptor);
-					m_Connection.m_Socket.Send(m_Connection.m_SendBuffer, 0, size, remoteEP);
+					if (m_Connection.TryGetPeerToPeerList(out var list))
+					{
+						var size = new PeerToPeerAccept(m_Connection.SelfId, peer.ClientConnectionId, list).Pack(m_Connection.m_SendBuffer, peer.Encryptor);
+						m_Connection.m_Socket.Send(m_Connection.m_SendBuffer, 0, size, remoteEP);
+					}
+					else
+					{
+						var size = new PeerToPeerAccept(m_Connection.SelfId, peer.ClientConnectionId).Pack(m_Connection.m_SendBuffer, peer.Encryptor);
+						m_Connection.m_Socket.Send(m_Connection.m_SendBuffer, 0, size, remoteEP);
+					}
 				}
+				RemoveTask(packet.ConnectionId);
 			}
-			RemoveTask(packet.ConnectionId);
 		}
 
 		public void OnPeerToPeerHello(PeerToPeerHello packet, IPEndPoint remoteEP)
@@ -176,86 +180,96 @@ namespace SRNet
 
 		byte[] GetPeerRandamKey(int id)
 		{
-			var list = m_PeerInfoList;
-			if (list == null) return null;
-			foreach (var info in list)
+			lock (m_ConnectToPeerTaskList)
 			{
-				if (info.ConnectionId == id)
+				var list = m_PeerInfoList;
+				if (list == null) return null;
+				foreach (var info in list)
 				{
-					return info.Randam;
+					if (info.ConnectionId == id)
+					{
+						return info.Randam;
+					}
 				}
+				return null;
 			}
-			return null;
 		}
 
 
 		public void UpdateList(PeerInfo[] list, bool init)
 		{
-			if (init)
+			lock (m_ConnectToPeerTaskList)
 			{
-				UpdateListImpl(list);
-			}
-			else
-			{
-				foreach (var info in list)
+				if (init)
 				{
-					Add(info);
+					UpdateListImpl(list);
+				}
+				else
+				{
+					foreach (var info in list)
+					{
+						Add(info);
+					}
 				}
 			}
 		}
 
 		public void Add(PeerInfo info)
 		{
-			if (m_PeerInfoList.Any(x => x.ConnectionId == info.ConnectionId))
+			lock (m_ConnectToPeerTaskList)
 			{
-				return;
+				if (m_PeerInfoList.Any(x => x.ConnectionId == info.ConnectionId))
+				{
+					return;
+				}
+				Array.Resize(ref m_PeerInfoList, m_PeerInfoList.Length + 1);
+				m_PeerInfoList[m_PeerInfoList.Length - 1] = info;
+				UpdateListImpl(m_PeerInfoList);
 			}
-			Array.Resize(ref m_PeerInfoList, m_PeerInfoList.Length + 1);
-			m_PeerInfoList[m_PeerInfoList.Length - 1] = info;
-			UpdateListImpl(m_PeerInfoList);
 		}
 
 		public void Remove(int connectionId)
 		{
-			UpdateListImpl(m_PeerInfoList.Where(x => x.ConnectionId != connectionId).ToArray());
+			lock (m_ConnectToPeerTaskList)
+			{
+				UpdateListImpl(m_PeerInfoList.Where(x => x.ConnectionId != connectionId).ToArray());
+			}
 		}
 
 		void UpdateListImpl(PeerInfo[] list)
 		{
 			m_PeerInfoList = list;
-			lock (m_ConnectToPeerTaskList)
+			bool requestFlag = true;
+			var removeList = new HashSet<int>(m_ConnectToPeerTaskList.Select(x => x.ConnectionId));
+			foreach (var info in m_PeerInfoList)
 			{
-				bool requestFlag = true;
-				var removeList = new HashSet<int>(m_ConnectToPeerTaskList.Select(x => x.ConnectionId));
-				foreach (var info in m_PeerInfoList)
+				removeList.Remove(info.ConnectionId);
+				if (m_PeerManager.TryGetValue(info.ConnectionId, out PeerEntry peer))
 				{
-					removeList.Remove(info.ConnectionId);
-					if (m_PeerManager.TryGetValue(info.ConnectionId, out PeerEntry peer))
-					{
-						peer.Update(info);
-						continue;
-					}
-					//接続リクエストはリストの自分よりも上のPeerに対して行う
-					if (info.ConnectionId == m_Connection.SelfId)
-					{
-						requestFlag = false;
-						continue;
-					}
-					var task = GetTask(info.ConnectionId);
-					task?.UpdateInfo(info);
-					if (task == null)
-					{
-						m_ConnectToPeerTaskList.Add(new ConnectToPeerTask(m_Connection, info, requestFlag));
-					}
+					peer.Update(info);
+					continue;
 				}
-				foreach (var id in removeList)
+				//接続リクエストはリストの自分よりも上のPeerに対して行う
+				if (info.ConnectionId == m_Connection.SelfId)
 				{
-					RemoveTask(id, true);
+					requestFlag = false;
+					continue;
+				}
+				var task = GetTask(info.ConnectionId);
+				task?.UpdateInfo(info);
+				if (task == null)
+				{
+					m_ConnectToPeerTaskList.Add(new ConnectToPeerTask(m_Connection, info, requestFlag));
 				}
 			}
+			foreach (var id in removeList)
+			{
+				RemoveTask(id, true);
+			}
+
 		}
 
-		public Task WaitTaskComplete()
+		public Task WaitTaskComplete(CancellationToken token)
 		{
 			lock (m_ConnectToPeerTaskList)
 			{
@@ -263,7 +277,7 @@ namespace SRNet
 				{
 					return Task.FromResult(true);
 				}
-				var future = new TaskCompletionSource<bool>();
+				var future = new TaskCompletionSource<bool>(token);
 				m_Complete.Enqueue(() =>
 				{
 					future.TrySetResult(true);

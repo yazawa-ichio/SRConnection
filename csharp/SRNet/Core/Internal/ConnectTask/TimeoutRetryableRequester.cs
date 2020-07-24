@@ -41,6 +41,7 @@ namespace SRNet
 					}
 				}
 			}
+			m_Token.ThrowIfCancellationRequested();
 			throw new Exception("timeout");
 		}
 	}
