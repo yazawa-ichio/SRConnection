@@ -4,7 +4,6 @@ using SRNet.Stun;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -18,6 +17,13 @@ namespace SRNet
 
 	public partial class Connection : IDisposable
 	{
+
+
+		ConnectionImpl m_Impl;
+		Queue<PeerEvent> m_PeerEvent = new Queue<PeerEvent>();
+		ConcurrentDictionary<int, Peer> m_Peers = new ConcurrentDictionary<int, Peer>();
+		ChannelContext m_Channel;
+
 		public int SelfId => m_Impl.SelfId;
 
 		public bool Disposed => m_Impl.Disposed;
@@ -28,10 +34,9 @@ namespace SRNet
 			set => m_Impl.DisposeOnDisconnectOwner = value;
 		}
 
-		ConnectionImpl m_Impl;
-		Queue<PeerEvent> m_PeerEvent = new Queue<PeerEvent>();
-		ConcurrentDictionary<int, Peer> m_Peers = new ConcurrentDictionary<int, Peer>();
-		ChannelContext m_Channel;
+		public ConnectionChannelAccessor Reliable => Channel(DefaultChannel.Reliable);
+
+		public ConnectionChannelAccessor Unreliable => Channel(DefaultChannel.Unreliable);
 
 		internal Connection(ConnectionImpl impl)
 		{
@@ -85,7 +90,8 @@ namespace SRNet
 
 		public Peer GetPeer(int id)
 		{
-			return m_Peers[id];
+			m_Peers.TryGetValue(id, out var peer);
+			return peer;
 		}
 
 		public bool TryGetPeer(int id, out Peer peer)
@@ -118,6 +124,8 @@ namespace SRNet
 			m_Channel.Unbind(id);
 		}
 
+		public ConnectionChannelAccessor Channel(short channel) => new ConnectionChannelAccessor(channel, m_Channel);
+
 		public void Send(int connectionId, byte[] buf, bool reliable = true)
 		{
 			Send(connectionId, buf, 0, buf.Length, reliable);
@@ -133,16 +141,6 @@ namespace SRNet
 		{
 			m_Impl.BroadcastDisconnect();
 			Dispose();
-		}
-
-		public void Send(short channel, int connectionId, byte[] buf, int offset, int size)
-		{
-			m_Channel.Send(channel, connectionId, buf, offset, size);
-		}
-
-		public void Send<T>(short channel, int connectionId, Action<Stream, T> write, in T obj)
-		{
-			m_Channel.Send(channel, connectionId, write, obj);
 		}
 
 		public bool TryReceive(out Message message)

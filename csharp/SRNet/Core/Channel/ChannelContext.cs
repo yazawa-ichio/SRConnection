@@ -25,7 +25,7 @@ namespace SRNet.Channel
 		int m_FragmentSize = Fragment.Size;
 		short m_FragmentId = 1;
 		byte[] m_ReceiveBuffer = new byte[Fragment.Size + 100];
-		Queue<Message> m_MessageCache = new Queue<Message>();
+		Queue<Message> m_BufferingMessage = new Queue<Message>();
 		TimeSpan m_AutoReadTimer = TimeSpan.Zero;
 
 		public TimeSpan AutoReadTime = TimeSpan.FromMilliseconds(200);
@@ -140,6 +140,48 @@ namespace SRNet.Channel
 			}
 		}
 
+		public void Broadcast(short channel, byte[] buf, int offset, int size)
+		{
+			lock (m_Channels)
+			{
+				try
+				{
+					GetFragments(buf, offset, size, m_FragmentId++, m_FragmentSize, m_FragmentList);
+					var c = m_Channels[channel];
+					foreach (var id in m_Peers.Keys)
+					{
+						c.Send(id, m_FragmentList);
+					}
+				}
+				finally
+				{
+					m_FragmentList.Clear();
+				}
+			}
+		}
+
+		public void Broadcast<T>(short channel, Action<Stream, T> write, in T obj)
+		{
+			lock (m_Channels)
+			{
+				try
+				{
+					m_Writer.Set(m_FragmentId++, m_FragmentSize);
+					write(m_Writer, obj);
+					m_Writer.GetFragments(m_FragmentList);
+					var c = m_Channels[channel];
+					foreach (var id in m_Peers.Keys)
+					{
+						c.Send(id, m_FragmentList);
+					}
+				}
+				finally
+				{
+					m_FragmentList.Clear();
+				}
+			}
+		}
+
 		void ResetAutoReadTime()
 		{
 			m_AutoReadTimer = AutoReadTime;
@@ -161,25 +203,25 @@ namespace SRNet.Channel
 			TryReadMessageImpl(out _, true);
 		}
 
-		bool TryReadMessageImpl(out Message message, bool cache)
+		bool TryReadMessageImpl(out Message message, bool buffering)
 		{
 			ResetAutoReadTime();
 			lock (m_ReceiveBuffer)
 			{
-				if (!cache && m_MessageCache.Count > 0)
+				if (!buffering && m_BufferingMessage.Count > 0)
 				{
-					message = m_MessageCache.Dequeue();
+					message = m_BufferingMessage.Dequeue();
 					return true;
 				}
 				int size = 0;
 				int id = 0;
 				while (m_Impl.TryReceiveFrom(m_ReceiveBuffer, 0, ref size, ref id))
 				{
-					if (TryReadImpl(out message, id, m_ReceiveBuffer, size))
+					if (TryReadImpl(out message, id, m_ReceiveBuffer, size, buffering))
 					{
-						if (cache)
+						if (buffering)
 						{
-							m_MessageCache.Enqueue(message.Copy());
+							m_BufferingMessage.Enqueue(message);
 							continue;
 						}
 						return true;
@@ -190,7 +232,7 @@ namespace SRNet.Channel
 			return false;
 		}
 
-		bool TryReadImpl(out Message message, int id, byte[] buf, int size)
+		bool TryReadImpl(out Message message, int id, byte[] buf, int size, bool buffering)
 		{
 			if (size < 3)
 			{
@@ -208,8 +250,13 @@ namespace SRNet.Channel
 					m_FragmentList.Clear();
 					if (channel.TryRead(id, m_FragmentList) && m_Peers.TryGetValue(id, out var peer))
 					{
-						m_Reader.Set(m_FragmentList, peer, channelId);
-						message = new Message(m_Reader);
+						var reader = m_Reader;
+						if (buffering)
+						{
+							reader = new MessageReader();
+						}
+						reader.Set(m_FragmentList, peer, channelId);
+						message = new Message(reader);
 						return true;
 					}
 				}

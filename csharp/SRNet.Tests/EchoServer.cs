@@ -73,7 +73,7 @@ namespace SRNet.Tests
 					if (m_Connection.TryPollReceive(out var message, TimeSpan.FromSeconds(1)))
 					{
 						Console.WriteLine(System.Text.Encoding.UTF8.GetString(message));
-						message.Peer.Send(message.Channel, message);
+						message.ResponseTo(message);
 					}
 				}
 				catch (Exception ex)

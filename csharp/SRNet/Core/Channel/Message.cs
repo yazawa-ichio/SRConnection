@@ -24,6 +24,23 @@ namespace SRNet
 			}
 		}
 
+		public PeerChannelAccessor PeerChannel
+		{
+			get
+			{
+				return Peer.Channel(m_Reader.Channel);
+			}
+		}
+
+
+		public ConnectionChannelAccessor ConnectionChannel
+		{
+			get
+			{
+				return PeerChannel.Parent;
+			}
+		}
+
 		public Stream Stream
 		{
 			get
@@ -85,6 +102,21 @@ namespace SRNet
 			{
 				fragment.TryReturn();
 			}
+		}
+
+		public void ResponseTo(byte[] buf)
+		{
+			Peer.Channel(m_Reader.Channel).Send(buf);
+		}
+
+		public void ResponseTo(byte[] buf, int offset, int size)
+		{
+			Peer.Channel(m_Reader.Channel).Send(buf, offset, size);
+		}
+
+		public void ResponseTo<T>(Action<Stream, T> write, in T obj)
+		{
+			Peer.Channel(m_Reader.Channel).Send(write, obj);
 		}
 
 		public static implicit operator Stream(Message message)
