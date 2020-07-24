@@ -109,6 +109,13 @@ namespace SRNet.Channel
 
 		public void AddPeer(int id)
 		{
+			lock (m_Channels)
+			{
+				foreach (var kvp in m_Channels)
+				{
+					kvp.Value.AddPeer(id);
+				}
+			}
 		}
 
 		public void RemovePeer(int id)

@@ -146,6 +146,7 @@ namespace SRNet
 				{
 					m_PeerEvent.Enqueue(new PeerEvent(PeerEvent.Type.Add, peer));
 				}
+				m_ChannelContext.AddPeer(entry.ConnectionId);
 			}
 		}
 
@@ -160,6 +161,7 @@ namespace SRNet
 						m_PeerEvent.Enqueue(new PeerEvent(PeerEvent.Type.Remove, peer));
 					}
 				}
+				m_ChannelContext.RemovePeer(entry.ConnectionId);
 			}
 		}
 	}
