@@ -88,5 +88,30 @@ namespace SRNet.Tests
 			}
 		}
 
+		[TestMethod, Timeout(20000)]
+		public async Task キャンセルテスト()
+		{
+			await Assert.ThrowsExceptionAsync<TaskCanceledException>(() =>
+			{
+				return DiscoveryUtil.GetRoom("TestRoom");
+			}, "デフォルトタイムアウトがあるのでキャンセルされる");
+		}
+
+		[TestMethod, Timeout(10000)]
+		public async Task ルーム取得の簡易関数テスト()
+		{
+			byte[] data = Random.GenBytes(64);
+			using var server = new UdpClient();
+			server.Client.Bind(new IPEndPoint(IPAddress.Any, 0));
+			var serverIP = server.Client.LocalEndPoint as IPEndPoint;
+			using (var service = new DiscoveryService("FastGetRoom", serverIP, data))
+			{
+				service.Start();
+				var room = await DiscoveryUtil.GetRoom("FastGetRoom");
+				Assert.AreEqual("FastGetRoom", room.Name, "ルーム名が一致");
+				Assert.AreEqual(To(data), To(room.Data), "設定したデータを受け取れる");
+			}
+		}
+
 	}
 }
