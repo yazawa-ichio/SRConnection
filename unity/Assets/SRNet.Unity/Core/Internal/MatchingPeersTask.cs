@@ -4,6 +4,7 @@ using System;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace SRNet
@@ -14,19 +15,22 @@ namespace SRNet
 		static readonly string DefaultStunURL = "stun.l.google.com";
 
 		UdpSocket m_Socket;
-		Func<StunResult, Task<P2PSettings>> m_Func;
+		Func<StunResult, CancellationToken, Task<P2PSettings>> m_Func;
 		string m_StunURL;
+		CancellationToken m_Token;
 
-		public MatchingPeersTask(string postUrl, string stunURL = null)
+		public MatchingPeersTask(string postUrl, string stunURL, CancellationToken token)
 		{
-			m_Func = (ret) => MatchingRequest(postUrl, ret);
+			m_Func = (ret, t) => MatchingRequest(postUrl, ret, t);
 			m_StunURL = stunURL ?? DefaultStunURL;
+			m_Token = token;
 		}
 
-		public MatchingPeersTask(Func<StunResult, Task<P2PSettings>> func, string stunURL = null)
+		public MatchingPeersTask(Func<StunResult, CancellationToken, Task<P2PSettings>> func, string stunURL, CancellationToken token)
 		{
 			m_Func = func;
 			m_StunURL = stunURL ?? DefaultStunURL;
+			m_Token = token;
 		}
 
 		public async Task<P2PConnectionImpl> Run()
@@ -35,8 +39,11 @@ namespace SRNet
 			{
 				m_Socket = new UdpSocket();
 				m_Socket.Bind();
-				var stunResult = await StunClient.Run(m_Socket.m_UdpClient, m_StunURL, 19302);
-				var response = await m_Func(stunResult);
+				var stunResult = await StunClient.Run(m_Socket.m_UdpClient, m_StunURL, 19302, m_Token);
+				var response = await m_Func(stunResult, m_Token);
+
+				m_Token.ThrowIfCancellationRequested();
+
 				return new P2PConnectionImpl(response, m_Socket);
 			}
 			catch (Exception ex)
@@ -70,13 +77,13 @@ namespace SRNet
 			public Peer[] peers = null;
 		}
 
-		async Task<P2PSettings> MatchingRequest(string url, StunResult ret)
+		async Task<P2PSettings> MatchingRequest(string url, StunResult ret, CancellationToken token)
 		{
 			var json = $"{{\"endpoint\":\"{ret.EndPoint}\",\"local_endpoint\":\"{ret.LocalEndPoint}\", \"nattype\": \"{ret.NatType}\"}}";
 			var content = new StringContent(json);
 			using (var client = new HttpClient())
 			{
-				var response = await client.PostAsync(url, content);
+				var response = await client.PostAsync(url, content, token);
 				if (response.StatusCode == HttpStatusCode.OK)
 				{
 					json = await response.Content.ReadAsStringAsync();

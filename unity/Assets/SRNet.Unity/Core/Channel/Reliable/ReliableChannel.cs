@@ -12,6 +12,8 @@ namespace SRNet.Channel
 
 		ReliableChannelConfig m_Config;
 
+		IConfig IChannel.Config => m_Config;
+
 		public ReliableChannel(ReliableChannelConfig config)
 		{
 			m_Config = config;

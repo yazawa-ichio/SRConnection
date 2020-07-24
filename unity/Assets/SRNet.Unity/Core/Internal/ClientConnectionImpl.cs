@@ -3,16 +3,13 @@
 
 	internal class ClientConnectionImpl : ConnectionImpl
 	{
-		public bool AllowP2P { get; private set; }
-
-		protected override bool UseP2P => AllowP2P;
-
-		public bool AutoDisposeOnDisconnectServer { get; set; } = true;
+		bool m_UseP2P;
+		public override bool UseP2P => m_UseP2P;
 
 		internal ClientConnectionImpl(int id, UdpSocket socket, ServerConnectSettings settings, Encryptor encryptor, EncryptorGenerator encryptorGenerator) : base(socket, encryptorGenerator)
 		{
 			SelfId = id;
-			AllowP2P = settings.UseP2P;
+			m_UseP2P = settings.UseP2P;
 			m_PeerManager.Add(new PeerEntry(id, 0, encryptor, settings.EndPoint));
 		}
 
@@ -25,7 +22,7 @@
 		internal protected override void OnRemove(PeerEntry peer)
 		{
 			base.OnRemove(peer);
-			if (AutoDisposeOnDisconnectServer && peer.ConnectionId == SelfId)
+			if (DisposeOnDisconnectOwner && peer.ConnectionId == SelfId)
 			{
 				Dispose();
 			}

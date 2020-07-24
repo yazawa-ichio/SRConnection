@@ -2,15 +2,12 @@
 {
 	public class ClientConnection : Connection
 	{
-		ClientConnectionImpl m_ClientImpl;
-
 		public Peer Server { get; private set; }
 
-		public bool AllowP2P => m_ClientImpl.AllowP2P;
+		public bool CanP2P => P2P != null;
 
 		internal ClientConnection(ClientConnectionImpl impl) : base(impl)
 		{
-			m_ClientImpl = impl;
 			Server = GetPeer(SelfId);
 		}
 

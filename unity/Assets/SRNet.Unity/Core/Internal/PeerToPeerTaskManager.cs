@@ -1,6 +1,7 @@
 ﻿using SRNet.Packet;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
 
@@ -11,12 +12,12 @@ namespace SRNet
 		ConnectionImpl m_Connection;
 		PeerManager m_PeerManager;
 		List<ConnectToPeerTask> m_ConnectToPeerTaskList = new List<ConnectToPeerTask>();
-		TaskCompletionSource<bool> m_ConnectToPeerComplete;
 		EncryptorGenerator m_EncryptorGenerator;
 		CookieProvider m_CookieProvider;
 		PeerToPeerList m_P2PList;
 		PeerInfo[] m_PeerInfoList = Array.Empty<PeerInfo>();
 		byte[] m_RandamKey;
+		Queue<Action> m_Complete = new Queue<Action>();
 
 		public PeerToPeerTaskManager(ConnectionImpl connection, CookieProvider cookieProvider, PeerManager manager)
 		{
@@ -47,6 +48,45 @@ namespace SRNet
 			}
 		}
 
+		ConnectToPeerTask GetTask(int id)
+		{
+			lock (m_ConnectToPeerTaskList)
+			{
+				foreach (var task in m_ConnectToPeerTaskList)
+				{
+					if (task.ConnectionId == id)
+					{
+						return task;
+					}
+				}
+				return null;
+			}
+		}
+
+		void RemoveTask(int id, bool cancel = false)
+		{
+			lock (m_ConnectToPeerTaskList)
+			{
+				for (int i = m_ConnectToPeerTaskList.Count - 1; i >= 0; i--)
+				{
+					var task = m_ConnectToPeerTaskList[i];
+					if (id != task.ConnectionId)
+					{
+						continue;
+					}
+					if (cancel)
+					{
+						task.Dispose();
+					}
+					m_ConnectToPeerTaskList.RemoveAt(i);
+				}
+				if (m_ConnectToPeerTaskList.Count == 0)
+				{
+					while (m_Complete.Count > 0) m_Complete.Dequeue()();
+				}
+			}
+		}
+
 		public void HandshakeAccept(PeerToPeerRequest packet, IPEndPoint remoteEP)
 		{
 			if (!m_PeerManager.TryGetValue(packet.ConnectionId, out var peer))
@@ -57,35 +97,22 @@ namespace SRNet
 				var encryptor = m_EncryptorGenerator.Generate(in key);
 				peer = new PeerEntry(packet.ConnectionId, nonce, encryptor, remoteEP);
 				m_PeerManager.Add(peer);
+				m_Connection.SendPeerToPeerList();
 			}
-			if (peer != null)
+			lock (m_Connection.m_Socket)
 			{
-				lock (m_Connection.m_Socket)
+				if (m_Connection.TryGetPeerToPeerList(out var list))
+				{
+					var size = new PeerToPeerAccept(m_Connection.SelfId, peer.ClientConnectionId, list).Pack(m_Connection.m_SendBuffer, peer.Encryptor);
+					m_Connection.m_Socket.Send(m_Connection.m_SendBuffer, 0, size, remoteEP);
+				}
+				else
 				{
 					var size = new PeerToPeerAccept(m_Connection.SelfId, peer.ClientConnectionId).Pack(m_Connection.m_SendBuffer, peer.Encryptor);
 					m_Connection.m_Socket.Send(m_Connection.m_SendBuffer, 0, size, remoteEP);
 				}
-				m_Connection.SendPeerToPeerList();
 			}
-			lock (m_ConnectToPeerTaskList)
-			{
-				for (int i = m_ConnectToPeerTaskList.Count - 1; i >= 0; i--)
-				{
-					if (packet.ConnectionId != m_ConnectToPeerTaskList[i].ConnectionId)
-					{
-						continue;
-					}
-					m_ConnectToPeerTaskList.RemoveAt(i);
-				}
-				if (m_ConnectToPeerTaskList.Count == 0)
-				{
-					if (m_ConnectToPeerComplete != null)
-					{
-						m_ConnectToPeerComplete.TrySetResult(true);
-						m_ConnectToPeerComplete = null;
-					}
-				}
-			}
+			RemoveTask(packet.ConnectionId);
 		}
 
 		public void OnPeerToPeerHello(PeerToPeerHello packet, IPEndPoint remoteEP)
@@ -107,17 +134,7 @@ namespace SRNet
 
 		void StartHandshake(PeerToPeerHello packet, IPEndPoint remoteEP)
 		{
-			lock (m_ConnectToPeerTaskList)
-			{
-				foreach (var task in m_ConnectToPeerTaskList)
-				{
-					if (packet.ConnectionId != task.ConnectionId)
-					{
-						continue;
-					}
-					task.OnPeerToPeerHello(packet, remoteEP);
-				}
-			}
+			GetTask(packet.ConnectionId)?.OnPeerToPeerHello(packet, remoteEP);
 		}
 
 		public void HandshakeComplete(byte[] buf, int size, IPEndPoint remoteEP)
@@ -126,25 +143,11 @@ namespace SRNet
 			int connectionId = BinaryUtil.ReadInt(buf, ref offset);
 			lock (m_ConnectToPeerTaskList)
 			{
-				for (int i = m_ConnectToPeerTaskList.Count - 1; i >= 0; i--)
+				PeerEntry peer = null;
+				if (GetTask(connectionId)?.OnHandshakeAccept(buf, size, out peer, remoteEP) ?? false)
 				{
-					if (connectionId != m_ConnectToPeerTaskList[i].ConnectionId)
-					{
-						continue;
-					}
-					if (m_ConnectToPeerTaskList[i].OnHandshakeAccept(buf, size, out PeerEntry peer, remoteEP))
-					{
-						m_ConnectToPeerTaskList.RemoveAt(i);
-						m_PeerManager.Add(peer);
-					}
-				}
-				if (m_ConnectToPeerTaskList.Count == 0)
-				{
-					if (m_ConnectToPeerComplete != null)
-					{
-						m_ConnectToPeerComplete.TrySetResult(true);
-						m_ConnectToPeerComplete = null;
-					}
+					m_PeerManager.Add(peer);
+					RemoveTask(connectionId);
 				}
 			}
 		}
@@ -185,7 +188,7 @@ namespace SRNet
 			return null;
 		}
 
-		List<PeerInfo> m_TempList = new List<PeerInfo>();
+
 		public void UpdateList(PeerInfo[] list, bool init)
 		{
 			if (init)
@@ -194,25 +197,16 @@ namespace SRNet
 			}
 			else
 			{
-				m_TempList.Clear();
-				m_TempList.AddRange(m_PeerInfoList);
 				foreach (var info in list)
 				{
-					if (Array.Exists(m_PeerInfoList, x => info.ConnectionId == x.ConnectionId))
-					{
-						continue;
-					}
-					m_TempList.Add(info);
+					Add(info);
 				}
-				var newList = m_TempList.ToArray();
-				m_TempList.Clear();
-				UpdateListImpl(newList);
 			}
 		}
 
 		public void Add(PeerInfo info)
 		{
-			if (Array.Exists(m_PeerInfoList, x => info.ConnectionId == x.ConnectionId))
+			if (m_PeerInfoList.Any(x => x.ConnectionId == info.ConnectionId))
 			{
 				return;
 			}
@@ -223,108 +217,59 @@ namespace SRNet
 
 		public void Remove(int connectionId)
 		{
-			m_TempList.Clear();
-			foreach (var info in m_PeerInfoList)
-			{
-				if (connectionId == info.ConnectionId)
-				{
-					continue;
-				}
-				m_TempList.Add(info);
-			}
-			var newList = m_TempList.ToArray();
-			m_TempList.Clear();
-			UpdateListImpl(newList);
+			UpdateListImpl(m_PeerInfoList.Where(x => x.ConnectionId != connectionId).ToArray());
 		}
 
 		void UpdateListImpl(PeerInfo[] list)
 		{
 			m_PeerInfoList = list;
-			bool requestFlag = true;
-			foreach (var info in m_PeerInfoList)
+			lock (m_ConnectToPeerTaskList)
 			{
-				if (m_PeerManager.TryGetValue(info.ConnectionId, out PeerEntry peer))
+				bool requestFlag = true;
+				var removeList = new HashSet<int>(m_ConnectToPeerTaskList.Select(x => x.ConnectionId));
+				foreach (var info in m_PeerInfoList)
 				{
-					if (peer.EndPoint.Port != info.EndPont.Port && peer.EndPoint.Address.ToString() != info.EndPont.Address)
+					removeList.Remove(info.ConnectionId);
+					if (m_PeerManager.TryGetValue(info.ConnectionId, out PeerEntry peer))
 					{
-						peer.EndPoint = info.EndPont.To();
+						peer.Update(info);
+						continue;
 					}
-					continue;
-				}
-				//接続リクエストはリストの自分よりも上のPeerに対して行う
-				if (info.ConnectionId == m_Connection.SelfId)
-				{
-					requestFlag = false;
-					continue;
-				}
-				bool hit = false;
-				lock (m_ConnectToPeerTaskList)
-				{
-					foreach (var task in m_ConnectToPeerTaskList)
+					//接続リクエストはリストの自分よりも上のPeerに対して行う
+					if (info.ConnectionId == m_Connection.SelfId)
 					{
-						if (task.ConnectionId == info.ConnectionId)
-						{
-							task.UpdateInfo(info);
-							hit = true;
-							break;
-						}
+						requestFlag = false;
+						continue;
 					}
-					if (!hit)
+					var task = GetTask(info.ConnectionId);
+					task?.UpdateInfo(info);
+					if (task == null)
 					{
 						m_ConnectToPeerTaskList.Add(new ConnectToPeerTask(m_Connection, info, requestFlag));
 					}
 				}
-			}
-			lock (m_ConnectToPeerTaskList)
-			{
-				for (int i = m_ConnectToPeerTaskList.Count - 1; i >= 0; i--)
+				foreach (var id in removeList)
 				{
-					bool hit = false;
-					foreach (var info in list)
-					{
-						if (info.ConnectionId == m_ConnectToPeerTaskList[i].ConnectionId)
-						{
-							hit = true;
-							break;
-						}
-					}
-					if (!hit)
-					{
-						m_ConnectToPeerTaskList[i].Dispose();
-						m_ConnectToPeerTaskList.RemoveAt(i);
-					}
-				}
-				if (m_ConnectToPeerTaskList.Count > 0)
-				{
-					if (m_ConnectToPeerComplete == null)
-					{
-						m_ConnectToPeerComplete = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-					}
-				}
-				else
-				{
-					if (m_ConnectToPeerComplete != null)
-					{
-						m_ConnectToPeerComplete.TrySetResult(true);
-						m_ConnectToPeerComplete = null;
-					}
+					RemoveTask(id, true);
 				}
 			}
 		}
 
-		public async Task WaitTaskComplete()
+		public Task WaitTaskComplete()
 		{
-			var tempTask = m_ConnectToPeerComplete;
-			if (tempTask == null)
-			{
-				await Task.Delay(100);
-			}
-			Task<bool> task = null;
 			lock (m_ConnectToPeerTaskList)
 			{
-				task = m_ConnectToPeerComplete?.Task ?? Task.FromResult(true);
+				if (m_ConnectToPeerTaskList.Count == 0)
+				{
+					return Task.FromResult(true);
+				}
+				var future = new TaskCompletionSource<bool>();
+				m_Complete.Enqueue(() =>
+				{
+					future.TrySetResult(true);
+				});
+				return future.Task;
 			}
-			await task;
 		}
 
 	}

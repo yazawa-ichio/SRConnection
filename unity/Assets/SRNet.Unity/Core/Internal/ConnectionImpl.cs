@@ -19,7 +19,7 @@ namespace SRNet
 
 		protected virtual bool IsHost => false;
 
-		protected virtual bool UseP2P => false;
+		public virtual bool UseP2P => false;
 
 		public int SelfId { get; protected set; }
 
@@ -41,6 +41,8 @@ namespace SRNet
 		public Action<PeerEntry> OnRemotePeer;
 
 		public Action<DateTime, TimeSpan> OnPostTimerUpdate;
+
+		public bool DisposeOnDisconnectOwner = true;
 
 		internal ConnectionImpl(UdpSocket socket, EncryptorGenerator encryptorGenerator)
 		{
@@ -92,6 +94,11 @@ namespace SRNet
 				m_PrevUpdateTime = now;
 				TimerUpdate(delta);
 				OnPostTimerUpdate?.Invoke(now, delta);
+			}
+			catch (Exception ex)
+			{
+				Log.Exception(ex);
+				Dispose();
 			}
 			finally
 			{
@@ -181,11 +188,6 @@ namespace SRNet
 			m_Socket.Send(m_SendBuffer, 0, packetSize, peer.EndPoint);
 		}
 
-		internal void AddConnectPeerList(PeerInfo info)
-		{
-			throw new NotImplementedException();
-		}
-
 		protected virtual int GetSendId(int peerId)
 		{
 			return SelfId;
@@ -258,10 +260,16 @@ namespace SRNet
 
 		public virtual void SendPeerToPeerList() { }
 
+		public virtual bool TryGetPeerToPeerList(out PeerToPeerList list)
+		{
+			list = default;
+			return false;
+		}
+
 		public bool TryReceiveFrom(byte[] buf, int offset, ref int size, ref int connectionId)
 		{
 			ArraySegment<byte> payload = default;
-			if (!ReceiveImpl(m_ReceiveBuffer, ref connectionId, ref payload, false, 0))
+			if (!ReceiveImpl(m_ReceiveBuffer, ref connectionId, ref payload))
 			{
 				return false;
 			}
@@ -271,29 +279,18 @@ namespace SRNet
 			return true;
 		}
 
-		public bool TryPollReceiveFrom(byte[] buf, int offset, ref int size, ref int connectionId, int microSeconds)
+		public bool Poll(int microSeconds)
 		{
-			Log.Trace("TryPollReceiveFrom microSeconds {0}", microSeconds);
-			ArraySegment<byte> payload = default;
-			if (!ReceiveImpl(m_ReceiveBuffer, ref connectionId, ref payload, true, microSeconds))
-			{
-				return false;
-			}
-			BinaryUtil.Write(payload, buf, ref offset);
-			size = payload.Count;
-			return size > 0;
+			Log.Trace("Poll microSeconds {0}", microSeconds);
+			return m_Socket.Poll(microSeconds, SelectMode.SelectRead);
 		}
 
-		bool ReceiveImpl(byte[] buf, ref int connectionId, ref ArraySegment<byte> ret, bool poll, int microSeconds)
+		bool ReceiveImpl(byte[] buf, ref int connectionId, ref ArraySegment<byte> ret)
 		{
 			var soket = m_Socket;
 			while (!m_Disposed)
 			{
 				IPEndPoint remoteEP = null;
-				if (poll && !soket.Poll(microSeconds, SelectMode.SelectRead))
-				{
-					return false;
-				}
 				var size = 0;
 				if (!soket.TryReceiveFrom(buf, ref size, ref remoteEP))
 				{
@@ -344,6 +341,11 @@ namespace SRNet
 							return true;
 						}
 						break;
+				}
+				// 一度でも実行できていればDisposeは無視する
+				if (m_Disposed)
+				{
+					return false;
 				}
 			}
 			throw new ObjectDisposedException(GetType().FullName);
@@ -509,7 +511,7 @@ namespace SRNet
 			}
 		}
 
-		public Task WaitP2PConnectComplete()
+		public Task WaitHandshake()
 		{
 			Log.Debug("Start WaitP2PConnectComplete");
 			lock (m_PeerManager)

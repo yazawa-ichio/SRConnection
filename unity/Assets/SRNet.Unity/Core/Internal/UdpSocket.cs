@@ -125,10 +125,10 @@ namespace SRNet
 		{
 			if (m_StunQuery != null && !m_StunQuery.IsCompleted)
 			{
-				return m_StunQuery.Run();
+				throw new Exception("already StunQuery.Run");
 			}
 			m_StunQuery = new StunQuery(m_Socket, host, port, timeout);
-			return m_StunQuery.Run();
+			return m_StunQuery.Run(System.Threading.CancellationToken.None);
 		}
 
 		public void Dispose()

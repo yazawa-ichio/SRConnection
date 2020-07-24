@@ -1,4 +1,5 @@
-﻿using System;
+﻿using SRNet.Packet;
+using System;
 using System.Net;
 
 namespace SRNet
@@ -41,6 +42,14 @@ namespace SRNet
 			ReceiveSequence = sendSeq;
 			RemoteReceiveSequence = ackSeq;
 			m_TimerSeq++;
+		}
+
+		public void Update(PeerInfo info)
+		{
+			if (EndPoint.Port != info.EndPont.Port && EndPoint.Address.ToString() != info.EndPont.Address)
+			{
+				EndPoint = info.EndPont.To();
+			}
 		}
 
 		public void Dispose()

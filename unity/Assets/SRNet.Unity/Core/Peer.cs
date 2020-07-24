@@ -21,16 +21,15 @@ namespace SRNet
 			m_Channel = channel;
 		}
 
+		public void Send(byte[] buf, bool reliable = true)
+		{
+			Send(buf, 0, buf.Length, reliable);
+		}
+
 		public void Send(byte[] buf, int offset, int size, bool reliable = true)
 		{
 			short channel = reliable ? DefaultChannel.Reliable : DefaultChannel.Unreliable;
 			m_Channel.Send(channel, m_Entry.ConnectionId, buf, offset, size);
-		}
-
-		public void Send(byte[] buf, bool reliable = true)
-		{
-			short channel = reliable ? DefaultChannel.Reliable : DefaultChannel.Unreliable;
-			m_Channel.Send(channel, m_Entry.ConnectionId, buf, 0, buf.Length);
 		}
 
 		public void Send<T>(Action<Stream, T> write, in T obj, bool reliable = true)
@@ -39,20 +38,9 @@ namespace SRNet
 			m_Channel.Send(channel, m_Entry.ConnectionId, write, obj);
 		}
 
-		public void Send(short channel, byte[] buf, int offset, int size)
-		{
-			m_Channel.Send(channel, m_Entry.ConnectionId, buf, offset, size);
-		}
+		public PeerChannelAccessor Channel(short channel) => new PeerChannelAccessor(channel, m_Entry.ConnectionId, m_Channel);
 
-		public void Send(short channel, byte[] buf)
-		{
-			m_Channel.Send(channel, m_Entry.ConnectionId, buf, 0, buf.Length);
-		}
-
-		public void Send<T>(short channel, Action<Stream, T> write, in T obj)
-		{
-			m_Channel.Send(channel, m_Entry.ConnectionId, write, obj);
-		}
+		internal ChannelAccessor ConnectionChannel(short channel) => new ChannelAccessor(channel, m_Channel);
 
 		public bool SendPing()
 		{

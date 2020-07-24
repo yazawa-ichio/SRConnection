@@ -26,6 +26,7 @@ namespace SRNet
 			m_ServerHello = m_CookieProvider.CreatePacket();
 			m_CookieCreateTime = DateTime.UtcNow;
 			m_RSA = config.RSA;
+			m_IdGenerator.AbsOnly = config.ConnectionIdAbsOnly;
 		}
 
 		protected override void Dispose(bool disposing)

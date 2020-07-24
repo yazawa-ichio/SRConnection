@@ -9,6 +9,8 @@ namespace SRNet
 
 		public RSA RSA { get; set; }
 
+		public bool ConnectionIdAbsOnly { get; set; }
+
 		public static ServerConfig Create(int port)
 		{
 			return new ServerConfig
