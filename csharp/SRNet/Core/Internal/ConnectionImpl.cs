@@ -95,6 +95,11 @@ namespace SRNet
 				TimerUpdate(delta);
 				OnPostTimerUpdate?.Invoke(now, delta);
 			}
+			catch (Exception ex)
+			{
+				Log.Exception(ex);
+				Dispose();
+			}
 			finally
 			{
 				m_RunTimerUpdate = false;
@@ -255,6 +260,12 @@ namespace SRNet
 
 		public virtual void SendPeerToPeerList() { }
 
+		public virtual bool TryGetPeerToPeerList(out PeerToPeerList list)
+		{
+			list = default;
+			return false;
+		}
+
 		public bool TryReceiveFrom(byte[] buf, int offset, ref int size, ref int connectionId)
 		{
 			ArraySegment<byte> payload = default;
@@ -330,6 +341,11 @@ namespace SRNet
 							return true;
 						}
 						break;
+				}
+				// 一度でも実行できていればDisposeは無視する
+				if (m_Disposed)
+				{
+					return false;
 				}
 			}
 			throw new ObjectDisposedException(GetType().FullName);

@@ -216,7 +216,10 @@ namespace SRNet.Channel
 
 		public void PreReadMessage()
 		{
-			TryReadMessageImpl(out _, true);
+			if (!m_Impl.Disposed)
+			{
+				TryReadMessageImpl(out _, true);
+			}
 		}
 
 		bool TryReadMessageImpl(out Message message, bool buffering)

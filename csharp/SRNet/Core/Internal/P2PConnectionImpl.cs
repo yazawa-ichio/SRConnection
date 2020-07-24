@@ -9,6 +9,7 @@ namespace SRNet
 	{
 		PeerEntry m_Owner;
 		bool m_IsOwner;
+		object m_PeerToPeerListLock = new object();
 		bool m_PeerToPeerListDirty = true;
 		PeerToPeerList m_PeerToPeerList = default;
 		DiscoveryService m_DiscoveryService;
@@ -110,14 +111,16 @@ namespace SRNet
 		void UpdateP2PList()
 		{
 			if (m_SendP2PList == null) m_SendP2PList = SendP2PList;
-
-			if (m_PeerToPeerListDirty)
+			lock (m_PeerToPeerListLock)
 			{
-				m_PeerToPeerListDirty = false;
-				var revision = m_PeerToPeerList.Revision;
-				revision++;
-				var randamKey = m_P2PTaskManager.GetHostRandamKey();
-				m_PeerToPeerList = new PeerToPeerList(SelfId, revision, m_PeerManager.CreatePeerInfoList(randamKey));
+				if (m_PeerToPeerListDirty)
+				{
+					m_PeerToPeerListDirty = false;
+					var revision = m_PeerToPeerList.Revision;
+					revision++;
+					var randamKey = m_P2PTaskManager.GetHostRandamKey();
+					m_PeerToPeerList = new PeerToPeerList(SelfId, revision, m_PeerManager.CreatePeerInfoList(randamKey));
+				}
 			}
 			lock (m_Socket)
 			{
@@ -125,6 +128,14 @@ namespace SRNet
 			}
 		}
 
-	}
+		public override bool TryGetPeerToPeerList(out PeerToPeerList list)
+		{
+			lock (m_PeerToPeerListLock)
+			{
+				list = m_PeerToPeerList;
+				return IsHost;
+			}
+		}
 
+	}
 }

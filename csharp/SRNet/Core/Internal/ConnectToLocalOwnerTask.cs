@@ -11,10 +11,12 @@ namespace SRNet
 		class HandshakeResult
 		{
 			public Encryptor Encryptor;
+			public PeerToPeerList List;
 
-			public HandshakeResult(Encryptor encryptor)
+			public HandshakeResult(Encryptor encryptor, PeerToPeerList list)
 			{
 				Encryptor = encryptor;
+				List = list;
 			}
 		}
 
@@ -60,8 +62,9 @@ namespace SRNet
 					var peer = new PeerEntry(m_OwnerId, 0, res.Encryptor, m_RemoteEP);
 
 					m_Token.ThrowIfCancellationRequested();
-
-					return new P2PConnectionImpl(m_SelfId, m_Socket, peer, m_EncryptorGenerator);
+					var impl = new P2PConnectionImpl(m_SelfId, m_Socket, peer, m_EncryptorGenerator);
+					impl.UpdateConnectPeerList(res.List.Peers, true);
+					return impl;
 				}
 			}
 			catch (Exception)
@@ -115,11 +118,7 @@ namespace SRNet
 				var receive = await m_Socket.ReceiveAsync();
 				var buf = receive.Buffer;
 				int size = buf.Length;
-				if (DiscoveryHolePunch.TryUnpack(buf, size, out var _))
-				{
-					continue;
-				}
-				if (PeerToPeerHello.TryUnpack(buf, size, out var _))
+				if (size == 0 || buf[0] != (byte)PeerToPeerAccept.Type)
 				{
 					continue;
 				}
@@ -135,12 +134,12 @@ namespace SRNet
 
 				var encryptor = m_EncryptorGenerator.Generate(in key);
 
-				if (!PeerToPeerAccept.TryUnpack(buf, size, encryptor, out var _))
+				if (!PeerToPeerAccept.TryUnpack(buf, size, encryptor, out var packet))
 				{
 					throw new Exception("fail unpack HandshakeAccept");
 				}
 				m_RemoteEP = receive.RemoteEndPoint;
-				return new HandshakeResult(encryptor);
+				return new HandshakeResult(encryptor, packet.GetPeerToPeerList());
 			}
 		}
 
