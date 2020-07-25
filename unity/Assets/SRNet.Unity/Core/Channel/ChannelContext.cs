@@ -170,6 +170,7 @@ namespace SRNet.Channel
 				try
 				{
 					GetFragments(buf, offset, size, m_FragmentId++, m_FragmentSize, m_FragmentList);
+					m_FragmentList.AddRef();
 					var c = m_Channels[channel];
 					foreach (var id in m_Peers.Keys)
 					{
@@ -178,7 +179,7 @@ namespace SRNet.Channel
 				}
 				finally
 				{
-					m_FragmentList.Clear();
+					m_FragmentList.RemoveRef(true);
 				}
 			}
 		}
@@ -192,6 +193,7 @@ namespace SRNet.Channel
 					m_Writer.Set(m_FragmentId++, m_FragmentSize);
 					write(m_Writer, obj);
 					m_Writer.GetFragments(m_FragmentList);
+					m_FragmentList.AddRef();
 					var c = m_Channels[channel];
 					foreach (var id in m_Peers.Keys)
 					{
@@ -200,7 +202,7 @@ namespace SRNet.Channel
 				}
 				finally
 				{
-					m_FragmentList.Clear();
+					m_FragmentList.RemoveRef(true);
 				}
 			}
 		}

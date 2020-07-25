@@ -247,12 +247,16 @@ namespace SRNet
 			Log.Info("BroadcastDisconnect");
 			lock (m_Socket)
 			{
-				foreach (var peer in m_PeerManager.GetPeers().ToArray())
+				var peers = m_PeerManager.GetPeers().ToArray();
+				foreach (var peer in peers)
 				{
 					var seq = peer.IncrementSendSequence();
 					var msg = new Disconnect(GetSendId(peer.ConnectionId), seq);
 					var size = msg.Pack(m_SendBuffer, peer.Encryptor);
 					m_Socket.Send(m_SendBuffer, 0, size, peer.EndPoint);
+				}
+				foreach (var peer in peers)
+				{
 					m_PeerManager.Remove(peer.ConnectionId);
 				}
 			}
