@@ -12,6 +12,7 @@ namespace SRNet
 	public class ChannelMapAccessor
 	{
 
+		Connection m_Connection;
 		ChannelContext m_Context;
 
 		public ChannelAccessor Reliable => Get(DefaultChannel.Reliable);
@@ -25,8 +26,9 @@ namespace SRNet
 			set => m_Context.AutoReadTime = value;
 		}
 
-		internal ChannelMapAccessor(ChannelContext context)
+		internal ChannelMapAccessor(Connection connection, ChannelContext context)
 		{
+			m_Connection = connection;
 			m_Context = context;
 			m_Context.Bind(DefaultChannel.Reliable, new ReliableChannelConfig());
 			m_Context.Bind(DefaultChannel.Unreliable, new UnreliableChannelConfig());
@@ -57,7 +59,7 @@ namespace SRNet
 		public ChannelAccessor Get(short id)
 		{
 			if (!m_Context.Contains(id)) throw new System.Collections.Generic.KeyNotFoundException(string.Format("not found channel {0}", id));
-			return new ChannelAccessor(id, m_Context);
+			return new ChannelAccessor(id, m_Connection);
 		}
 
 		public ChannelAccessor this[short id]

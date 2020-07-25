@@ -39,7 +39,7 @@ namespace SRNet
 			base.Dispose(disposing);
 		}
 
-		protected override void TimerUpdate(TimeSpan delta)
+		public override void Update(TimeSpan delta)
 		{
 			PeerUpdate(delta);
 			if (DateTime.UtcNow - m_CookieCreateTime > TimeSpan.FromMinutes(1))
@@ -65,10 +65,7 @@ namespace SRNet
 		{
 			if (ClientHello.TryUnpack(buf, 0, size, out _))
 			{
-				lock (m_Socket)
-				{
-					m_Socket.Send(m_ServerHello, 0, m_ServerHello.Length, remoteEP);
-				}
+				m_Socket.Send(m_ServerHello, 0, m_ServerHello.Length, remoteEP);
 			}
 		}
 
@@ -101,11 +98,8 @@ namespace SRNet
 				}
 				if (peer != null)
 				{
-					lock (m_Socket)
-					{
-						size = new HandshakeAccept(peer.ConnectionId).Pack(m_SendBuffer, peer.Encryptor);
-						m_Socket.Send(m_SendBuffer, 0, size, peer.EndPoint);
-					}
+					size = new HandshakeAccept(peer.ConnectionId).Pack(m_SendBuffer, peer.Encryptor);
+					m_Socket.Send(m_SendBuffer, 0, size, peer.EndPoint);
 				}
 			}
 		}

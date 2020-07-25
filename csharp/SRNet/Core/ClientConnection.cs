@@ -13,13 +13,13 @@
 
 		public void SendDisconnect()
 		{
-			Server.SendDisconnect();
+			Server.Disconnect();
 			Dispose();
 		}
 
 		public void SendPing()
 		{
-			Server.SendPing();
+			Server.Ping();
 		}
 
 	}

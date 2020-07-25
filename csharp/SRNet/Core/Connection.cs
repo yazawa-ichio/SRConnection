@@ -2,6 +2,8 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
+using System.Threading;
 
 namespace SRNet
 {
@@ -34,17 +36,17 @@ namespace SRNet
 		Queue<PeerEvent> m_PeerEvent = new Queue<PeerEvent>();
 		ConcurrentDictionary<int, Peer> m_Peers = new ConcurrentDictionary<int, Peer>();
 		ChannelContext m_ChannelContext;
+		Timer m_Timer;
 
 		internal Connection(ConnectionImpl impl)
 		{
 			m_ChannelContext = new ChannelContext(impl, m_Peers);
-			Channel = new ChannelMapAccessor(m_ChannelContext);
+			Channel = new ChannelMapAccessor(this, m_ChannelContext);
 			Reliable = Channel.Reliable;
 			Unreliable = Channel.Unreliable;
 			m_Impl = impl;
 			m_Impl.OnAddPeer += OnAdd;
 			m_Impl.OnRemotePeer += OnRemove;
-			m_Impl.OnPostTimerUpdate += OnPostTimerUpdate;
 			foreach (var peer in m_Impl.GetPeers())
 			{
 				OnAdd(peer);
@@ -53,17 +55,19 @@ namespace SRNet
 			{
 				P2P = new P2PAccessor(m_Impl, m_ChannelContext);
 			}
-		}
 
-		void OnPostTimerUpdate(DateTime now, TimeSpan delta)
-		{
-			m_ChannelContext.Update(delta);
+			m_Timer = new Timer(TimerUpdate, null, 100, 100);
+
 		}
 
 		public void Dispose()
 		{
-			m_ChannelContext.Dispose();
-			m_Impl.Dispose();
+			lock (m_Impl)
+			{
+				m_Timer?.Dispose();
+				m_ChannelContext.Dispose();
+				m_Impl.Dispose();
+			}
 		}
 
 		public Peer GetPeer(int id)
@@ -84,20 +88,93 @@ namespace SRNet
 
 		public void Send(int connectionId, byte[] buf, int offset, int size, bool reliable = true)
 		{
-			var channel = reliable ? DefaultChannel.Unreliable : DefaultChannel.Unreliable;
-			m_ChannelContext.Send(channel, connectionId, buf, offset, size);
+			lock (m_Impl)
+			{
+				var channel = reliable ? DefaultChannel.Unreliable : DefaultChannel.Unreliable;
+				m_ChannelContext.Send(channel, connectionId, buf, offset, size);
+			}
+		}
+
+		public void ChannelSend(short channel, int connectionId, byte[] buf, int offset, int size)
+		{
+			lock (m_Impl)
+			{
+				m_ChannelContext.Send(channel, connectionId, buf, offset, size);
+			}
+		}
+
+		public void ChannelSend<T>(short channel, int connectionId, Action<Stream, T> write, in T obj)
+		{
+			lock (m_Impl)
+			{
+				m_ChannelContext.Send(channel, connectionId, write, in obj);
+			}
+		}
+
+		public void ChannelBroadcast(short channel, byte[] buf, int offset, int size)
+		{
+			lock (m_Impl)
+			{
+				m_ChannelContext.Broadcast(channel, buf, offset, size);
+			}
+		}
+
+		public void ChannelBroadcast<T>(short channel, Action<Stream, T> write, in T obj)
+		{
+			lock (m_Impl)
+			{
+				m_ChannelContext.Broadcast(channel, write, in obj);
+			}
 		}
 
 		public void BroadcastDisconnect()
 		{
-			m_Impl.BroadcastDisconnect();
-			Dispose();
+			lock (m_Impl)
+			{
+				m_Impl.BroadcastDisconnect();
+				Dispose();
+			}
+		}
+
+		bool m_RunTimerUpdate;
+		void TimerUpdate(object _)
+		{
+			if (m_RunTimerUpdate) return;
+			try
+			{
+				m_RunTimerUpdate = true;
+				Update();
+			}
+			catch (Exception ex)
+			{
+				Log.Exception(ex);
+				Dispose();
+			}
+			finally
+			{
+				m_RunTimerUpdate = false;
+			}
+		}
+
+		DateTime m_PrevUpdateTime = DateTime.UtcNow;
+		public void Update()
+		{
+			lock (m_Impl)
+			{
+				var now = DateTime.UtcNow;
+				var delta = now - m_PrevUpdateTime;
+				if (delta < TimeSpan.Zero) delta = TimeSpan.Zero;
+				if (delta > TimeSpan.FromMilliseconds(1000)) delta = TimeSpan.FromMilliseconds(1000);
+				m_PrevUpdateTime = now;
+				m_Impl.Update(delta);
+				m_ChannelContext.Update(delta);
+			}
 		}
 
 		bool m_HandlePeerEvent;
 		public bool TryReceive(out Message message)
 		{
-			lock (m_PeerEvent)
+			lock (m_Impl)
 			{
 				try
 				{
@@ -132,9 +209,9 @@ namespace SRNet
 
 		void OnAdd(PeerEntry entry)
 		{
-			lock (m_PeerEvent)
+			lock (m_Impl)
 			{
-				var peer = new Peer(entry, m_Impl, m_ChannelContext);
+				var peer = new Peer(entry, this, m_Impl);
 				m_Peers.TryAdd(peer.ConnectionId, peer);
 				m_ChannelContext.AddPeer(entry.ConnectionId);
 				var e = new PeerEvent(PeerEvent.Type.Add, peer);
@@ -151,7 +228,7 @@ namespace SRNet
 
 		void OnRemove(PeerEntry entry)
 		{
-			lock (m_PeerEvent)
+			lock (m_Impl)
 			{
 				m_Peers.TryRemove(entry.ConnectionId, out var peer);
 				m_ChannelContext.RemovePeer(entry.ConnectionId);

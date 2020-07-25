@@ -20,33 +20,51 @@ namespace SRNet
 
 		public void Connect(PeerInfo[] list, bool init = true)
 		{
-			m_Impl.UpdateConnectPeerList(list, init);
+			lock (m_Impl)
+			{
+				m_Impl.UpdateConnectPeerList(list, init);
+			}
 		}
 
 		public void Connect(PeerInfo info)
 		{
-			m_Impl.AddConnectPeer(info);
+			lock (m_Impl)
+			{
+				m_Impl.AddConnectPeer(info);
+			}
 		}
 
 		public Task WaitHandshake(CancellationToken token = default)
 		{
-			token.ThrowIfCancellationRequested();
-			return m_Impl.WaitHandshake(token);
+			lock (m_Impl)
+			{
+				token.ThrowIfCancellationRequested();
+				return m_Impl.WaitHandshake(token);
+			}
 		}
 
 		public void Cancel(int connectionId)
 		{
-			m_Impl.CancelP2PHandshake(connectionId);
+			lock (m_Impl)
+			{
+				m_Impl.CancelP2PHandshake(connectionId);
+			}
 		}
 
 		public void Cancel()
 		{
-			m_Impl.UpdateConnectPeerList(Array.Empty<PeerInfo>(), true);
+			lock (m_Impl)
+			{
+				m_Impl.UpdateConnectPeerList(Array.Empty<PeerInfo>(), true);
+			}
 		}
 
 		public Task<StunResult> StunQuery(string host, int port, TimeSpan timeout)
 		{
-			return m_Impl.StunQuery(host, port, timeout);
+			lock (m_Impl)
+			{
+				return m_Impl.StunQuery(host, port, timeout);
+			}
 		}
 
 	}

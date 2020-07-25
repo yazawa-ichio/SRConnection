@@ -20,34 +20,32 @@ namespace SRNet.Channel
 
 		public void Enqueue(in UnreliableData data)
 		{
-			lock (m_Buffer)
+			if (m_Disposed)
 			{
-				if (m_Disposed)
+				data.Dispose();
+				return;
+			}
+			if (SeqUtil.IsGreaterEqual(m_RemoveSequence, data.Sequence))
+			{
+				data.Dispose();
+				return;
+			}
+			if (m_Buffer.ContainsKey(data.Sequence))
+			{
+				data.Dispose();
+				return;
+			}
+			var payload = data.Payload;
+			m_Buffer.Add(data.Sequence, payload);
+			UpdateCount(payload);
+			while (m_Config.MaxBufferSize <= m_Buffer.Count && m_Count.Count > 1)
+			{
+				if (!TryRemoveSequence())
 				{
-					data.Dispose();
-					return;
-				}
-				if (SeqUtil.IsGreaterEqual(m_RemoveSequence, data.Sequence))
-				{
-					data.Dispose();
-					return;
-				}
-				if (m_Buffer.ContainsKey(data.Sequence))
-				{
-					data.Dispose();
-					return;
-				}
-				var payload = data.Payload;
-				m_Buffer.Add(data.Sequence, payload);
-				UpdateCount(payload);
-				while (m_Config.MaxBufferSize <= m_Buffer.Count && m_Count.Count > 1)
-				{
-					if (!TryRemoveSequence())
-					{
-						break;
-					}
+					break;
 				}
 			}
+
 		}
 
 		bool TryRemoveSequence()
@@ -102,43 +100,39 @@ namespace SRNet.Channel
 
 		public bool TryDequeue(List<Fragment> output)
 		{
-			lock (m_Buffer)
-			{
-				if (m_Disposed || m_DequeueList.Count == 0) return false;
+			if (m_Disposed || m_DequeueList.Count == 0) return false;
 
-				short start = 0;
-				int len = 0;
-				foreach (var kvp in m_Buffer)
+			short start = 0;
+			int len = 0;
+			foreach (var kvp in m_Buffer)
+			{
+				if (m_DequeueList.Contains(kvp.Value.Id))
 				{
-					if (m_DequeueList.Contains(kvp.Value.Id))
-					{
-						start = kvp.Key;
-						len = kvp.Value.Length;
-						m_DequeueList.Remove(kvp.Value.Id);
-						break;
-					}
+					start = kvp.Key;
+					len = kvp.Value.Length;
+					m_DequeueList.Remove(kvp.Value.Id);
+					break;
 				}
-				for (int i = 0; i < len; i++)
-				{
-					m_Buffer.TryGetValue(start, out var fragment);
-					m_Buffer.Remove(start++);
-					output.Add(fragment);
-				}
-				return true;
 			}
+			for (int i = 0; i < len; i++)
+			{
+				m_Buffer.TryGetValue(start, out var fragment);
+				m_Buffer.Remove(start++);
+				output.Add(fragment);
+			}
+			return true;
+
 		}
 
 		public void Dispose()
 		{
-			lock (m_Buffer)
+			m_Disposed = true;
+			foreach (var fragment in m_Buffer.Values)
 			{
-				m_Disposed = true;
-				foreach (var fragment in m_Buffer.Values)
-				{
-					fragment.RemoveRef();
-				}
-				m_Buffer.Clear();
+				fragment.RemoveRef();
 			}
+			m_Buffer.Clear();
+
 		}
 	}
 }

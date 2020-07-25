@@ -18,7 +18,7 @@ namespace SRNet.Channel
 		bool m_InitRead;
 		ConnectionImpl m_Impl;
 		ConcurrentDictionary<int, Peer> m_Peers;
-		Dictionary<short, IChannel> m_Channels = new Dictionary<short, IChannel>();
+		ConcurrentDictionary<short, IChannel> m_Channels = new ConcurrentDictionary<short, IChannel>();
 		List<Fragment> m_FragmentList = new List<Fragment>();
 		MessageReader m_Reader = new MessageReader();
 		MessageWriter m_Writer = new MessageWriter();
@@ -40,62 +40,43 @@ namespace SRNet.Channel
 
 		public void Bind(short id, IConfig config)
 		{
-			lock (m_Channels)
-			{
-				var channel = config.Create();
-				channel.Init(id, this);
-				m_Channels.Add(id, channel);
-			}
+			var channel = config.Create();
+			channel.Init(id, this);
+			m_Channels.TryAdd(id, channel);
 		}
 
 		public void Unbind(short id)
 		{
-			lock (m_Channels)
+			if (m_Channels.TryRemove(id, out var channel))
 			{
-				if (m_Channels.TryGetValue(id, out var channel))
-				{
-					m_Channels.Remove(id);
-					channel.Dispose();
-				}
+				channel.Dispose();
 			}
 		}
 
 		public bool Contains(short id)
 		{
-			lock (m_Channels)
-			{
-				return m_Channels.ContainsKey(id);
-			}
+			return m_Channels.ContainsKey(id);
 		}
 
 		public IConfig GetConfig(short id)
 		{
-			lock (m_Channels)
-			{
-				return m_Channels[id].Config;
-			}
+			return m_Channels[id].Config;
 		}
 
 		public void Dispose()
 		{
-			lock (m_Channels)
+			foreach (var channel in m_Channels.Values)
 			{
-				foreach (var channel in m_Channels.Values)
-				{
-					channel.Dispose();
-				}
-				m_Channels.Clear();
+				channel.Dispose();
 			}
+			m_Channels.Clear();
 		}
 
 		public void Update(in TimeSpan delta)
 		{
-			lock (m_Channels)
+			foreach (var channel in m_Channels.Values)
 			{
-				foreach (var channel in m_Channels.Values)
-				{
-					channel.Update(delta);
-				}
+				channel.Update(delta);
 			}
 			if (!m_InitRead)
 			{
@@ -109,101 +90,83 @@ namespace SRNet.Channel
 
 		public void AddPeer(int id)
 		{
-			lock (m_Channels)
+			foreach (var kvp in m_Channels)
 			{
-				foreach (var kvp in m_Channels)
-				{
-					kvp.Value.AddPeer(id);
-				}
+				kvp.Value.AddPeer(id);
 			}
 		}
 
 		public void RemovePeer(int id)
 		{
-			lock (m_Channels)
+			foreach (var kvp in m_Channels)
 			{
-				foreach (var kvp in m_Channels)
-				{
-					kvp.Value.RemovePeer(id);
-				}
+				kvp.Value.RemovePeer(id);
 			}
 		}
 
 		public void Send(short channel, int connectionId, byte[] buf, int offset, int size)
 		{
-			lock (m_Channels)
+			try
 			{
-				try
-				{
-					GetFragments(buf, offset, size, m_FragmentId++, m_FragmentSize, m_FragmentList);
-					m_Channels[channel].Send(connectionId, m_FragmentList);
-				}
-				finally
-				{
-					m_FragmentList.Clear();
-				}
+				GetFragments(buf, offset, size, m_FragmentId++, m_FragmentSize, m_FragmentList);
+				m_Channels[channel].Send(connectionId, m_FragmentList);
+			}
+			finally
+			{
+				m_FragmentList.Clear();
 			}
 		}
 
 		public void Send<T>(short channel, int connectionId, Action<Stream, T> write, in T obj)
 		{
-			lock (m_Channels)
+			try
 			{
-				try
-				{
-					m_Writer.Set(m_FragmentId++, m_FragmentSize);
-					write(m_Writer, obj);
-					m_Writer.GetFragments(m_FragmentList);
-					m_Channels[channel].Send(connectionId, m_FragmentList);
-				}
-				finally
-				{
-					m_FragmentList.Clear();
-				}
+				m_Writer.Set(m_FragmentId++, m_FragmentSize);
+				write(m_Writer, obj);
+				m_Writer.GetFragments(m_FragmentList);
+				m_Channels[channel].Send(connectionId, m_FragmentList);
+			}
+			finally
+			{
+				m_FragmentList.Clear();
 			}
 		}
 
 		public void Broadcast(short channel, byte[] buf, int offset, int size)
 		{
-			lock (m_Channels)
+			try
 			{
-				try
+				GetFragments(buf, offset, size, m_FragmentId++, m_FragmentSize, m_FragmentList);
+				m_FragmentList.AddRef();
+				var c = m_Channels[channel];
+				foreach (var id in m_Peers.Keys)
 				{
-					GetFragments(buf, offset, size, m_FragmentId++, m_FragmentSize, m_FragmentList);
-					m_FragmentList.AddRef();
-					var c = m_Channels[channel];
-					foreach (var id in m_Peers.Keys)
-					{
-						c.Send(id, m_FragmentList);
-					}
+					c.Send(id, m_FragmentList);
 				}
-				finally
-				{
-					m_FragmentList.RemoveRef(true);
-				}
+			}
+			finally
+			{
+				m_FragmentList.RemoveRef(true);
 			}
 		}
 
 		public void Broadcast<T>(short channel, Action<Stream, T> write, in T obj)
 		{
-			lock (m_Channels)
+			try
 			{
-				try
+				m_Writer.Set(m_FragmentId++, m_FragmentSize);
+				write(m_Writer, obj);
+				m_Writer.GetFragments(m_FragmentList);
+				m_FragmentList.AddRef();
+				var c = m_Channels[channel];
+				foreach (var id in m_Peers.Keys)
 				{
-					m_Writer.Set(m_FragmentId++, m_FragmentSize);
-					write(m_Writer, obj);
-					m_Writer.GetFragments(m_FragmentList);
-					m_FragmentList.AddRef();
-					var c = m_Channels[channel];
-					foreach (var id in m_Peers.Keys)
-					{
-						c.Send(id, m_FragmentList);
-					}
+					c.Send(id, m_FragmentList);
 				}
-				finally
-				{
-					m_FragmentList.RemoveRef(true);
-				}
+			}
+			finally
+			{
+				m_FragmentList.RemoveRef(true);
 			}
 		}
 
@@ -234,31 +197,28 @@ namespace SRNet.Channel
 		bool TryReadMessageImpl(out Message message, bool buffering)
 		{
 			ResetAutoReadTime();
-			lock (m_ReceiveBuffer)
+			while (!buffering && m_BufferingMessage.Count > 0)
 			{
-				while (!buffering && m_BufferingMessage.Count > 0)
+				message = m_BufferingMessage.Dequeue();
+				//切断済みのPeerのメッセージは飛ばさない
+				if (!m_Peers.ContainsKey(message.Peer.ConnectionId))
 				{
-					message = m_BufferingMessage.Dequeue();
-					//切断済みのPeerのメッセージは飛ばさない
-					if (!m_Peers.ContainsKey(message.Peer.ConnectionId))
+					continue;
+				}
+				return true;
+			}
+			int size = 0;
+			int id = 0;
+			while (m_Impl.TryReceiveFrom(m_ReceiveBuffer, 0, ref size, ref id))
+			{
+				if (TryReadImpl(out message, id, m_ReceiveBuffer, size, buffering))
+				{
+					if (buffering)
 					{
+						m_BufferingMessage.Enqueue(message);
 						continue;
 					}
 					return true;
-				}
-				int size = 0;
-				int id = 0;
-				while (m_Impl.TryReceiveFrom(m_ReceiveBuffer, 0, ref size, ref id))
-				{
-					if (TryReadImpl(out message, id, m_ReceiveBuffer, size, buffering))
-					{
-						if (buffering)
-						{
-							m_BufferingMessage.Enqueue(message);
-							continue;
-						}
-						return true;
-					}
 				}
 			}
 			message = default;
@@ -272,30 +232,27 @@ namespace SRNet.Channel
 				message = default;
 				return false;
 			}
-			lock (m_Channels)
+			int offset = 0;
+			var channelId = BinaryUtil.ReadShort(buf, ref offset);
+			if (m_Channels.TryGetValue(channelId, out var channel))
 			{
-				int offset = 0;
-				var channelId = BinaryUtil.ReadShort(buf, ref offset);
-				if (m_Channels.TryGetValue(channelId, out var channel))
+				offset = 0;
+				channel.OnReceive(id, buf, offset, size);
+				m_FragmentList.Clear();
+				if (channel.TryRead(id, m_FragmentList) && m_Peers.TryGetValue(id, out var peer))
 				{
-					offset = 0;
-					channel.OnReceive(id, buf, offset, size);
-					m_FragmentList.Clear();
-					if (channel.TryRead(id, m_FragmentList) && m_Peers.TryGetValue(id, out var peer))
+					var reader = m_Reader;
+					if (buffering)
 					{
-						var reader = m_Reader;
-						if (buffering)
-						{
-							reader = new MessageReader();
-						}
-						reader.Set(m_FragmentList, peer, channelId);
-						message = new Message(reader);
-						return true;
+						reader = new MessageReader();
 					}
+					reader.Set(m_FragmentList, peer, channelId);
+					message = new Message(reader);
+					return true;
 				}
-				message = default;
-				return false;
 			}
+			message = default;
+			return false;
 		}
 
 	}

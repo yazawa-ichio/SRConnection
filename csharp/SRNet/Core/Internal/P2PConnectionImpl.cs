@@ -30,11 +30,8 @@ namespace SRNet
 			m_DiscoveryService = new DiscoveryService(config.RoomName, m_Socket.LocalEP, data, config.DiscoveryServicePort);
 			m_DiscoveryService.OnHolePunchRequest += (ep) =>
 			{
-				lock (m_Socket)
-				{
-					var packet = new DiscoveryHolePunch().Pack();
-					m_Socket.Send(packet, 0, packet.Length, ep);
-				}
+				var packet = new DiscoveryHolePunch().Pack();
+				m_Socket.Send(packet, 0, packet.Length, ep);
 			};
 			m_DiscoveryService.Start(config.DiscoveryQueryMatch);
 		}
@@ -84,9 +81,9 @@ namespace SRNet
 			m_DiscoveryService?.Dispose();
 		}
 
-		protected override void TimerUpdate(TimeSpan delta)
+		public override void Update(TimeSpan delta)
 		{
-			base.TimerUpdate(delta);
+			base.Update(delta);
 			if (IsHost && !Disposed)
 			{
 				UpdateP2PList();
@@ -111,30 +108,21 @@ namespace SRNet
 		void UpdateP2PList()
 		{
 			if (m_SendP2PList == null) m_SendP2PList = SendP2PList;
-			lock (m_PeerToPeerListLock)
+			if (m_PeerToPeerListDirty)
 			{
-				if (m_PeerToPeerListDirty)
-				{
-					m_PeerToPeerListDirty = false;
-					var revision = m_PeerToPeerList.Revision;
-					revision++;
-					var randamKey = m_P2PTaskManager.GetHostRandamKey();
-					m_PeerToPeerList = new PeerToPeerList(SelfId, revision, m_PeerManager.CreatePeerInfoList(randamKey));
-				}
+				m_PeerToPeerListDirty = false;
+				var revision = m_PeerToPeerList.Revision;
+				revision++;
+				var randamKey = m_P2PTaskManager.GetHostRandamKey();
+				m_PeerToPeerList = new PeerToPeerList(SelfId, revision, m_PeerManager.CreatePeerInfoList(randamKey));
 			}
-			lock (m_Socket)
-			{
-				m_PeerManager.ForEach(m_SendP2PList, m_PeerToPeerList);
-			}
+			m_PeerManager.ForEach(m_SendP2PList, m_PeerToPeerList);
 		}
 
 		public override bool TryGetPeerToPeerList(out PeerToPeerList list)
 		{
-			lock (m_PeerToPeerListLock)
-			{
-				list = m_PeerToPeerList;
-				return IsHost;
-			}
+			list = m_PeerToPeerList;
+			return IsHost;
 		}
 
 	}

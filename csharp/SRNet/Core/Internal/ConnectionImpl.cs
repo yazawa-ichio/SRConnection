@@ -29,7 +29,6 @@ namespace SRNet
 		internal protected byte[] m_SendBuffer = new byte[MaxBufferSize];
 		protected byte[] m_ReceiveBuffer = new byte[MaxBufferSize];
 		Timer m_Timer;
-		DateTime m_PrevUpdateTime;
 		TimeSpan m_PingTimer;
 
 		protected CookieProvider m_CookieProvider = new CookieProvider();
@@ -40,8 +39,6 @@ namespace SRNet
 
 		public Action<PeerEntry> OnRemotePeer;
 
-		public Action<DateTime, TimeSpan> OnPostTimerUpdate;
-
 		public bool DisposeOnDisconnectOwner = true;
 
 		internal ConnectionImpl(UdpSocket socket, EncryptorGenerator encryptorGenerator)
@@ -50,8 +47,6 @@ namespace SRNet
 			m_EncryptorGenerator = encryptorGenerator;
 			m_PeerManager = new PeerManager(this);
 			m_P2PTaskManager = new PeerToPeerTaskManager(this, m_CookieProvider, m_PeerManager);
-			m_PrevUpdateTime = DateTime.UtcNow;
-			m_Timer = new Timer(TimerUpdate, null, 100, 100);
 			m_CookieProvider.Update();
 		}
 
@@ -80,33 +75,7 @@ namespace SRNet
 			return m_PeerManager.GetPeers().Select(x => x.ConnectionId);
 		}
 
-		bool m_RunTimerUpdate;
-		void TimerUpdate(object _)
-		{
-			if (m_RunTimerUpdate) return;
-			try
-			{
-				m_RunTimerUpdate = true;
-				var now = DateTime.UtcNow;
-				var delta = now - m_PrevUpdateTime;
-				if (delta < TimeSpan.Zero) delta = TimeSpan.Zero;
-				if (delta > TimeSpan.FromMilliseconds(1000)) delta = TimeSpan.FromMilliseconds(1000);
-				m_PrevUpdateTime = now;
-				TimerUpdate(delta);
-				OnPostTimerUpdate?.Invoke(now, delta);
-			}
-			catch (Exception ex)
-			{
-				Log.Exception(ex);
-				Dispose();
-			}
-			finally
-			{
-				m_RunTimerUpdate = false;
-			}
-		}
-
-		protected virtual void TimerUpdate(TimeSpan delta)
+		public virtual void Update(TimeSpan delta)
 		{
 			PeerUpdate(delta);
 		}
@@ -114,10 +83,7 @@ namespace SRNet
 		protected virtual void PeerUpdate(TimeSpan delta)
 		{
 			m_PeerManager.Update(delta);
-			lock (m_PeerManager)
-			{
-				m_P2PTaskManager.Update(delta);
-			}
+			m_P2PTaskManager.Update(delta);
 			if (!IsHost)
 			{
 				m_PingTimer -= delta;
@@ -161,10 +127,7 @@ namespace SRNet
 		{
 			if (m_PeerManager.TryGetValue(connectionId, out PeerEntry peer))
 			{
-				lock (m_Socket)
-				{
-					SendImpl(peer, buf, offset, size, encrypt);
-				}
+				SendImpl(peer, buf, offset, size, encrypt);
 				return true;
 			}
 			return false;
@@ -196,13 +159,10 @@ namespace SRNet
 		public bool SendPing(int connectionId)
 		{
 			Log.Trace("SendPing {0}", connectionId);
-			lock (m_Socket)
+			if (m_PeerManager.TryGetValue(connectionId, out var peer))
 			{
-				if (m_PeerManager.TryGetValue(connectionId, out var peer))
-				{
-					SendPingImpl(peer);
-					return true;
-				}
+				SendPingImpl(peer);
+				return true;
 			}
 			return false;
 		}
@@ -218,26 +178,20 @@ namespace SRNet
 		{
 			Log.Trace("BroadcastPing");
 			if (m_SendPing == null) m_SendPing = SendPingImpl;
-			lock (m_Socket)
-			{
-				m_PeerManager.ForEach(m_SendPing);
-			}
+			m_PeerManager.ForEach(m_SendPing);
 		}
 
 		public bool SendDisconnect(int connectionId)
 		{
 			Log.Info("SendDisconnect:{0}", connectionId);
-			lock (m_Socket)
+			if (m_PeerManager.TryGetValue(connectionId, out var peer))
 			{
-				if (m_PeerManager.TryGetValue(connectionId, out var peer))
-				{
-					var seq = peer.IncrementSendSequence();
-					var msg = new Disconnect(GetSendId(peer.ConnectionId), seq);
-					var size = msg.Pack(m_SendBuffer, peer.Encryptor);
-					m_Socket.Send(m_SendBuffer, 0, size, peer.EndPoint);
-					m_PeerManager.Remove(connectionId);
-					return true;
-				}
+				var seq = peer.IncrementSendSequence();
+				var msg = new Disconnect(GetSendId(peer.ConnectionId), seq);
+				var size = msg.Pack(m_SendBuffer, peer.Encryptor);
+				m_Socket.Send(m_SendBuffer, 0, size, peer.EndPoint);
+				m_PeerManager.Remove(connectionId);
+				return true;
 			}
 			return false;
 		}
@@ -245,20 +199,17 @@ namespace SRNet
 		public void BroadcastDisconnect()
 		{
 			Log.Info("BroadcastDisconnect");
-			lock (m_Socket)
+			var peers = m_PeerManager.GetPeers().ToArray();
+			foreach (var peer in peers)
 			{
-				var peers = m_PeerManager.GetPeers().ToArray();
-				foreach (var peer in peers)
-				{
-					var seq = peer.IncrementSendSequence();
-					var msg = new Disconnect(GetSendId(peer.ConnectionId), seq);
-					var size = msg.Pack(m_SendBuffer, peer.Encryptor);
-					m_Socket.Send(m_SendBuffer, 0, size, peer.EndPoint);
-				}
-				foreach (var peer in peers)
-				{
-					m_PeerManager.Remove(peer.ConnectionId);
-				}
+				var seq = peer.IncrementSendSequence();
+				var msg = new Disconnect(GetSendId(peer.ConnectionId), seq);
+				var size = msg.Pack(m_SendBuffer, peer.Encryptor);
+				m_Socket.Send(m_SendBuffer, 0, size, peer.EndPoint);
+			}
+			foreach (var peer in peers)
+			{
+				m_PeerManager.Remove(peer.ConnectionId);
 			}
 		}
 
@@ -384,11 +335,8 @@ namespace SRNet
 
 			peer.Update(remoteEP, packet.SendSequence, packet.ReceiveSequence);
 
-			lock (m_Socket)
-			{
-				offset = new Pong(GetSendId(connectionId), peer).Pack(m_SendBuffer, peer.Encryptor);
-				m_Socket.Send(m_SendBuffer, 0, offset, peer.EndPoint);
-			}
+			offset = new Pong(GetSendId(connectionId), peer).Pack(m_SendBuffer, peer.Encryptor);
+			m_Socket.Send(m_SendBuffer, 0, offset, peer.EndPoint);
 			Log.Trace("OnPing {0}", connectionId);
 		}
 
