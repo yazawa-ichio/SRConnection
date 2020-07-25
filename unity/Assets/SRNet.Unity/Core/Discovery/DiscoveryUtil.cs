@@ -18,5 +18,20 @@ namespace SRNet
 				return await client.GetRoomAsync(roomName, token);
 			}
 		}
+
+		public static Task<DiscoveryRoom[]> GetRooms(int timeoutMilliseconds = 10000)
+		{
+			return GetRooms(new CancellationTokenSource(timeoutMilliseconds).Token);
+		}
+
+		public static async Task<DiscoveryRoom[]> GetRooms(CancellationToken token)
+		{
+			using (var client = new DiscoveryClient())
+			{
+				client.Start();
+				return await client.GetRoomsAsync(token);
+			}
+		}
+
 	}
 }
