@@ -9,7 +9,6 @@ namespace SRNet
 	{
 		PeerEntry m_Owner;
 		bool m_IsOwner;
-		object m_PeerToPeerListLock = new object();
 		bool m_PeerToPeerListDirty = true;
 		PeerToPeerList m_PeerToPeerList = default;
 		DiscoveryService m_DiscoveryService;
@@ -24,8 +23,8 @@ namespace SRNet
 			m_CookieProvider.Update();
 			m_Socket.Bind(new IPEndPoint(config.Address, 0), false);
 			SelfId = Random.GenInt();
-			m_P2PTaskManager.CreateHostRandamKey();
-			var randamKey = m_P2PTaskManager.GetHostRandamKey();
+			P2PTask.CreateHostRandamKey();
+			var randamKey = P2PTask.GetHostRandamKey();
 			var data = new PeerToPeerRoomData(SelfId, m_CookieProvider.Cookie, randamKey).Pack();
 			m_DiscoveryService = new DiscoveryService(config.RoomName, m_Socket.LocalEP, data, config.DiscoveryServicePort);
 			m_DiscoveryService.OnHolePunchRequest += (ep) =>
@@ -50,7 +49,7 @@ namespace SRNet
 			m_CookieProvider.Update();
 			m_IsOwner = false;
 			SelfId = setting.SelfId;
-			UpdateConnectPeerList(setting.Peers, true);
+			P2PTask.UpdateList(setting.Peers, true);
 		}
 
 		protected override void Dispose(bool disposing)
@@ -81,9 +80,9 @@ namespace SRNet
 			m_DiscoveryService?.Dispose();
 		}
 
-		public override void Update(TimeSpan delta)
+		public override void OnUpdateStatus(TimeSpan delta)
 		{
-			base.Update(delta);
+			base.OnUpdateStatus(delta);
 			if (IsHost && !Disposed)
 			{
 				UpdateP2PList();
@@ -113,7 +112,7 @@ namespace SRNet
 				m_PeerToPeerListDirty = false;
 				var revision = m_PeerToPeerList.Revision;
 				revision++;
-				var randamKey = m_P2PTaskManager.GetHostRandamKey();
+				var randamKey = P2PTask.GetHostRandamKey();
 				m_PeerToPeerList = new PeerToPeerList(SelfId, revision, m_PeerManager.CreatePeerInfoList(randamKey));
 			}
 			m_PeerManager.ForEach(m_SendP2PList, m_PeerToPeerList);

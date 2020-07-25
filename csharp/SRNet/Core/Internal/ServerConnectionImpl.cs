@@ -39,7 +39,7 @@ namespace SRNet
 			base.Dispose(disposing);
 		}
 
-		public override void Update(TimeSpan delta)
+		public override void OnUpdateStatus(TimeSpan delta)
 		{
 			PeerUpdate(delta);
 			if (DateTime.UtcNow - m_CookieCreateTime > TimeSpan.FromMinutes(1))

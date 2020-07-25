@@ -30,8 +30,8 @@ namespace SRNet.Tests
 		public async Task エコーサーバーテスト()
 		{
 			using (var server = new EchoServer())
-			using (var conn1 = await Connection.Connect(server.GetConnectSettings()))
-			using (var conn2 = await Connection.Connect(server.GetConnectSettings()))
+			using (var conn1 = await Connection.ConnectToServer(server.GetConnectSettings()))
+			using (var conn2 = await Connection.ConnectToServer(server.GetConnectSettings()))
 			{
 				for (int i = 0; i < 100; i++)
 				{
@@ -39,9 +39,9 @@ namespace SRNet.Tests
 					conn1.Server.Send(To(text));
 					conn2.Server.Send(To(text));
 					Message message;
-					while (!conn1.TryPollReceive(out message, TimeSpan.FromSeconds(1))) ;
+					while (!conn1.PollUpdate(out message, TimeSpan.FromSeconds(1))) ;
 					Assert.AreEqual(text, To(message));
-					while (!conn2.TryPollReceive(out message, TimeSpan.FromSeconds(1))) ;
+					while (!conn2.PollUpdate(out message, TimeSpan.FromSeconds(1))) ;
 					Assert.AreEqual(text, To(message));
 				}
 			}
@@ -68,7 +68,7 @@ namespace SRNet.Tests
 				try
 				{
 					var start = DateTime.Now;
-					using (var conn = await Connection.Connect(settings))
+					using (var conn = await Connection.ConnectToServer(settings))
 					{
 						while ((DateTime.Now - start) < TimeSpan.FromSeconds(1))
 						{
@@ -76,7 +76,7 @@ namespace SRNet.Tests
 							var randam = System.Convert.ToBase64String(Random.GenBytes(1000));
 							conn.Server.Send(To(randam));
 							Message message;
-							while (!conn.TryPollReceive(out message, TimeSpan.FromSeconds(1))) ;
+							while (!conn.PollUpdate(out message, TimeSpan.FromSeconds(1))) ;
 							Assert.AreEqual(randam, To(message));
 						}
 					};
@@ -89,7 +89,7 @@ namespace SRNet.Tests
 		public async Task ユーザー切断テスト()
 		{
 			using (var server = new EchoServer())
-			using (var conn = await Connection.Connect(server.GetConnectSettings()))
+			using (var conn = await Connection.ConnectToServer(server.GetConnectSettings()))
 			{
 				Assert.IsTrue(server.PeerEvents.Count > 0);
 				Assert.IsTrue(server.PeerEvents.TryDequeue(out var e));
@@ -115,9 +115,9 @@ namespace SRNet.Tests
 		public async Task サーバー切断テスト()
 		{
 			using (var server = new EchoServer())
-			using (var conn1 = await Connection.Connect(server.GetConnectSettings()))
-			using (var conn2 = await Connection.Connect(server.GetConnectSettings()))
-			using (var conn3 = await Connection.Connect(server.GetConnectSettings()))
+			using (var conn1 = await Connection.ConnectToServer(server.GetConnectSettings()))
+			using (var conn2 = await Connection.ConnectToServer(server.GetConnectSettings()))
+			using (var conn3 = await Connection.ConnectToServer(server.GetConnectSettings()))
 			{
 				string sendmessage = "サーバー切断テスト";
 				server.Conn.Reliable.Broadcast(To(sendmessage));
@@ -127,7 +127,7 @@ namespace SRNet.Tests
 				string msg3 = null;
 				while (!conn1.Disposed)
 				{
-					if (conn1.TryReceive(out var m))
+					if (conn1.Update(out var m))
 					{
 						Assert.IsNull(msg1);
 						msg1 = To(m);
@@ -135,7 +135,7 @@ namespace SRNet.Tests
 				}
 				while (!conn2.Disposed)
 				{
-					if (conn2.TryReceive(out var m))
+					if (conn2.Update(out var m))
 					{
 						Assert.IsNull(msg2);
 						msg2 = To(m);
@@ -143,7 +143,7 @@ namespace SRNet.Tests
 				}
 				while (!conn3.Disposed)
 				{
-					if (conn3.TryReceive(out var m))
+					if (conn3.Update(out var m))
 					{
 						Assert.IsNull(msg3);
 						msg3 = To(m);
@@ -159,17 +159,17 @@ namespace SRNet.Tests
 		public async Task アクセサテスト()
 		{
 			using (var server = new EchoServer())
-			using (var conn = await Connection.Connect(server.GetConnectSettings()))
+			using (var conn = await Connection.ConnectToServer(server.GetConnectSettings()))
 			{
 				server.Conn.Reliable.Target(conn.SelfId).Send(To("PeerChannelAccessor"));
 
 				Message message;
-				while (!conn.TryPollReceive(out message, TimeSpan.FromSeconds(1))) ;
+				while (!conn.PollUpdate(out message, TimeSpan.FromSeconds(1))) ;
 				Assert.AreEqual("PeerChannelAccessor", To(message), "PeerChannelAccessor経由で送信");
 				Assert.AreEqual(DefaultChannel.Reliable, message.ChannelId, "PeerChannelAccessor経由で送信");
 
 				message.PeerChannel.Send(To("Message.PeerChannelAccessor"));
-				while (!conn.TryPollReceive(out message, TimeSpan.FromSeconds(1))) ;
+				while (!conn.PollUpdate(out message, TimeSpan.FromSeconds(1))) ;
 				Assert.AreEqual("Message.PeerChannelAccessor", To(message), "MessageのPeerChannelAccessor経由で送信。エコーが返る");
 
 
@@ -185,12 +185,12 @@ namespace SRNet.Tests
 				{
 					var cancellationTokenSource = new CancellationTokenSource();
 					cancellationTokenSource.Cancel();
-					return Connection.Connect(server.GetConnectSettings(), cancellationTokenSource.Token);
+					return Connection.ConnectToServer(server.GetConnectSettings(), cancellationTokenSource.Token);
 				}, "即時キャンセルの場合");
 				await Assert.ThrowsExceptionAsync<OperationCanceledException>(async () =>
 				{
 					var cancellationTokenSource = new CancellationTokenSource();
-					var task = Connection.Connect(server.GetConnectSettings(), cancellationTokenSource.Token);
+					var task = Connection.ConnectToServer(server.GetConnectSettings(), cancellationTokenSource.Token);
 					await Task.Yield();
 					cancellationTokenSource.Cancel();
 					await task;
@@ -210,8 +210,8 @@ namespace SRNet.Tests
 					discovery.Start();
 					room = await discovery.GetRoomAsync("TestRoom");
 				}
-				using (var conn1 = await Connection.Connect(room))
-				using (var conn2 = await Connection.Connect(room))
+				using (var conn1 = await Connection.ConnectToRoom(room))
+				using (var conn2 = await Connection.ConnectToRoom(room))
 				{
 					for (int i = 0; i < 100; i++)
 					{
@@ -219,28 +219,28 @@ namespace SRNet.Tests
 						conn1.Send(host.SelfId, To(text));
 						conn2.Send(host.SelfId, To(text));
 						Message message;
-						while (!conn1.TryPollReceive(out message, TimeSpan.FromSeconds(1))) ;
+						while (!conn1.PollUpdate(out message, TimeSpan.FromSeconds(1))) ;
 						Assert.AreEqual(text, To(message));
 						Assert.AreEqual(host.SelfId, message.Peer.ConnectionId);
-						while (!conn2.TryPollReceive(out message, TimeSpan.FromSeconds(1))) ;
+						while (!conn2.PollUpdate(out message, TimeSpan.FromSeconds(1))) ;
 						Assert.AreEqual(text, To(message));
 						Assert.AreEqual(host.SelfId, message.Peer.ConnectionId);
 
 						conn1.Send(conn2.SelfId, To(text));
 						conn2.Send(conn1.SelfId, To(text));
-						while (!conn1.TryPollReceive(out message, TimeSpan.FromSeconds(1))) ;
+						while (!conn1.PollUpdate(out message, TimeSpan.FromSeconds(1))) ;
 						Assert.AreEqual(text, To(message));
 						Assert.AreEqual(conn2.SelfId, message.Peer.ConnectionId);
-						while (!conn2.TryPollReceive(out message, TimeSpan.FromSeconds(1))) ;
+						while (!conn2.PollUpdate(out message, TimeSpan.FromSeconds(1))) ;
 						Assert.AreEqual(text, To(message));
 						Assert.AreEqual(conn1.SelfId, message.Peer.ConnectionId);
 
 						host.Send(conn1.SelfId, To(text));
 						host.Send(conn2.SelfId, To(text));
-						while (!conn1.TryPollReceive(out message, TimeSpan.FromSeconds(1))) ;
+						while (!conn1.PollUpdate(out message, TimeSpan.FromSeconds(1))) ;
 						Assert.AreEqual(text, To(message));
 						Assert.AreEqual(host.SelfId, message.Peer.ConnectionId);
-						while (!conn2.TryPollReceive(out message, TimeSpan.FromSeconds(1))) ;
+						while (!conn2.PollUpdate(out message, TimeSpan.FromSeconds(1))) ;
 						Assert.AreEqual(text, To(message));
 						Assert.AreEqual(host.SelfId, message.Peer.ConnectionId);
 
@@ -267,12 +267,12 @@ namespace SRNet.Tests
 				{
 					var cancellationTokenSource = new CancellationTokenSource();
 					cancellationTokenSource.Cancel();
-					return Connection.Connect(room, token: cancellationTokenSource.Token);
+					return Connection.ConnectToRoom(room, token: cancellationTokenSource.Token);
 				}, "即時キャンセルの場合");
 				await Assert.ThrowsExceptionAsync<OperationCanceledException>(async () =>
 				{
 					var cancellationTokenSource = new CancellationTokenSource();
-					var task = Connection.Connect(room, token: cancellationTokenSource.Token);
+					var task = Connection.ConnectToRoom(room, token: cancellationTokenSource.Token);
 					await Task.Yield();
 					cancellationTokenSource.Cancel();
 					await task;
@@ -346,7 +346,7 @@ namespace SRNet.Tests
 				{
 					await Task.Delay(100);
 					conn.Reliable.Broadcast(System.Text.Encoding.UTF8.GetBytes("Message" + DateTime.Now));
-					while (conn.TryReceive(out var _))
+					while (conn.Update(out var _))
 					{
 						success = true;
 					}

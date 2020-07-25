@@ -10,6 +10,8 @@ namespace SRNet
 
 		public int ConnectionId => m_Entry.ConnectionId;
 
+		public TimeSpan HeartbeatTimeout { get => m_Entry.Timeout; set => m_Entry.Timeout = value; }
+
 		PeerEntry m_Entry;
 		Connection m_Connection;
 		ConnectionImpl m_Impl;

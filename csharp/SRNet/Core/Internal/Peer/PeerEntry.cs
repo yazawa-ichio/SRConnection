@@ -6,13 +6,12 @@ namespace SRNet
 {
 	internal class PeerEntry : IDisposable
 	{
-		static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
+		static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(30);
 
 		public bool Disposed;
 		public readonly int ConnectionId;
 		public int ClientConnectionId;
 		public readonly Encryptor Encryptor;
-		public short SendSequence { get; private set; }
 		public short ReceiveSequence { get; private set; }
 		public short RemoteReceiveSequence { get; private set; }
 		public IPEndPoint EndPoint;
@@ -20,6 +19,9 @@ namespace SRNet
 		TimeSpan m_TimeoutTimer;
 		int m_CheckTimerSeq;
 		int m_TimerSeq;
+		short m_SendSequence;
+
+		public TimeSpan Timeout = DefaultTimeout;
 
 		public PeerEntry(int connectionId, int clientId, Encryptor encryptor, IPEndPoint endPoint)
 		{
@@ -28,11 +30,19 @@ namespace SRNet
 			Encryptor = encryptor;
 			EndPoint = endPoint;
 			m_TimeoutTimer = Timeout;
+
+			//初回送信時のSeqを適当なランダム値に変更
+			var rand = (short)(Random.GenShort() / 2);
+			if (rand < 0)
+			{
+				rand = (short)(-rand);
+			}
+			m_SendSequence = (short)((short.MaxValue / 4) + rand);
 		}
 
 		public short IncrementSendSequence()
 		{
-			return SendSequence++;
+			return m_SendSequence++;
 		}
 
 		public void Update(IPEndPoint endPoint, short sendSeq, short ackSeq)

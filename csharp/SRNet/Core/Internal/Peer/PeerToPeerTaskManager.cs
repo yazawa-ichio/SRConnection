@@ -153,7 +153,7 @@ namespace SRNet
 			if (PeerToPeerList.TryUnpack(buf, size, peer.Encryptor, out var packet))
 			{
 				m_P2PList = packet;
-				m_Connection.UpdateConnectPeerList(packet.Peers, true);
+				UpdateList(packet.Peers, true);
 			}
 		}
 
@@ -174,6 +174,7 @@ namespace SRNet
 
 		public void UpdateList(PeerInfo[] list, bool init)
 		{
+			Log.Debug("Update Connect PeerList {0}", list.Length);
 			if (init)
 			{
 				UpdateListImpl(list);
@@ -189,6 +190,7 @@ namespace SRNet
 
 		public void Add(PeerInfo info)
 		{
+			Log.Debug("Add Connect Peer id{0}, {1}, {2}", info.ConnectionId, info.EndPont, info.LocalEndPont);
 			if (m_PeerInfoList.Any(x => x.ConnectionId == info.ConnectionId))
 			{
 				return;
@@ -238,6 +240,7 @@ namespace SRNet
 
 		public Task WaitTaskComplete(CancellationToken token)
 		{
+			Log.Debug("Start WaitTaskComplete");
 			if (m_ConnectToPeerTaskList.Count == 0)
 			{
 				return Task.FromResult(true);

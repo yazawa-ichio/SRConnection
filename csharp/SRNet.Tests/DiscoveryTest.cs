@@ -93,8 +93,8 @@ namespace SRNet.Tests
 		{
 			await Assert.ThrowsExceptionAsync<TaskCanceledException>(() =>
 			{
-				return DiscoveryUtil.GetRoom("TestRoom");
-			}, "デフォルトタイムアウトがあるのでキャンセルされる");
+				return DiscoveryUtil.GetRoom("TestRoom", 1000);
+			}, "タイムアウトがあるのでキャンセルされる");
 		}
 
 		[TestMethod, Timeout(10000)]

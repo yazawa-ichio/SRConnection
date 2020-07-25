@@ -1,5 +1,4 @@
-﻿using SRNet.Channel;
-using SRNet.Packet;
+﻿using SRNet.Packet;
 using SRNet.Stun;
 using System;
 using System.Threading;
@@ -10,19 +9,17 @@ namespace SRNet
 	public class P2PAccessor
 	{
 		ConnectionImpl m_Impl;
-		ChannelContext m_Channel;
 
-		internal P2PAccessor(ConnectionImpl impl, ChannelContext channel)
+		internal P2PAccessor(ConnectionImpl impl)
 		{
 			m_Impl = impl;
-			m_Channel = channel;
 		}
 
 		public void Connect(PeerInfo[] list, bool init = true)
 		{
 			lock (m_Impl)
 			{
-				m_Impl.UpdateConnectPeerList(list, init);
+				m_Impl.P2PTask.UpdateList(list, init);
 			}
 		}
 
@@ -30,7 +27,7 @@ namespace SRNet
 		{
 			lock (m_Impl)
 			{
-				m_Impl.AddConnectPeer(info);
+				m_Impl.P2PTask.Add(info);
 			}
 		}
 
@@ -39,7 +36,7 @@ namespace SRNet
 			lock (m_Impl)
 			{
 				token.ThrowIfCancellationRequested();
-				return m_Impl.WaitHandshake(token);
+				return m_Impl.P2PTask.WaitTaskComplete(token);
 			}
 		}
 
@@ -47,7 +44,7 @@ namespace SRNet
 		{
 			lock (m_Impl)
 			{
-				m_Impl.CancelP2PHandshake(connectionId);
+				m_Impl.P2PTask.Remove(connectionId);
 			}
 		}
 
@@ -55,7 +52,7 @@ namespace SRNet
 		{
 			lock (m_Impl)
 			{
-				m_Impl.UpdateConnectPeerList(Array.Empty<PeerInfo>(), true);
+				m_Impl.P2PTask.UpdateList(Array.Empty<PeerInfo>(), true);
 			}
 		}
 

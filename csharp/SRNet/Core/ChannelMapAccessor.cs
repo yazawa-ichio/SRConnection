@@ -13,23 +13,16 @@ namespace SRNet
 	{
 
 		Connection m_Connection;
-		ChannelContext m_Context;
+		ChannelManager m_Context;
 
 		public ChannelAccessor Reliable => Get(DefaultChannel.Reliable);
 
 		public ChannelAccessor Unreliable => Get(DefaultChannel.Unreliable);
 
-
-		public TimeSpan AutoReadTime
-		{
-			get => m_Context.AutoReadTime;
-			set => m_Context.AutoReadTime = value;
-		}
-
-		internal ChannelMapAccessor(Connection connection, ChannelContext context)
+		internal ChannelMapAccessor(Connection connection, ChannelManager channels)
 		{
 			m_Connection = connection;
-			m_Context = context;
+			m_Context = channels;
 			m_Context.Bind(DefaultChannel.Reliable, new ReliableChannelConfig());
 			m_Context.Bind(DefaultChannel.Unreliable, new UnreliableChannelConfig());
 		}
@@ -66,7 +59,6 @@ namespace SRNet
 		{
 			get => Get(id);
 		}
-
 
 	}
 
