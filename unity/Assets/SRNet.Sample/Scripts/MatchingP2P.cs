@@ -126,7 +126,7 @@ namespace SRNet.Sample
 			{
 				try
 				{
-					while (m_Connection.TryReceive(out var message))
+					while (m_Connection.Update(out var message))
 					{
 						m_Receive = "From" + message.Peer.ConnectionId + "Receive:" + System.Text.Encoding.UTF8.GetString(message);
 					}

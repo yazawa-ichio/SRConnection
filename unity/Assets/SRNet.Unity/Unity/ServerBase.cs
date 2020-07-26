@@ -43,7 +43,7 @@ namespace SRNet.Unity
 
 			OnPreDispatch();
 
-			while (m_Connection.TryReceive(out var message))
+			while (m_Connection.Update(out var message))
 			{
 				if (UseCopyMessage)
 				{

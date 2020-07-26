@@ -46,7 +46,7 @@ namespace SRNet.Unity
 			m_Cancellation?.Cancel();
 			m_Cancellation = new CancellationTokenSource();
 			token.Register(m_Cancellation.Cancel);
-			m_Connection = await Connection.Connect(settings, m_Cancellation.Token);
+			m_Connection = await Connection.ConnectToServer(settings, m_Cancellation.Token);
 			m_Cancellation = null;
 			OnConnect?.Invoke();
 			Update();
@@ -98,7 +98,7 @@ namespace SRNet.Unity
 				return;
 			}
 
-			while (m_Connection.TryReceive(out var message))
+			while (m_Connection.Update(out var message))
 			{
 				OnRawMessage?.Invoke(message);
 

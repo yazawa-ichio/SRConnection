@@ -62,7 +62,7 @@ namespace SRNet.Unity
 		public async Task ConnectHost(DiscoveryRoom room, CancellationToken token = default)
 		{
 			InitConnect(token);
-			SetConnection(await Connection.Connect(room, token: m_Cancellation.Token));
+			SetConnection(await Connection.ConnectToRoom(room, token: m_Cancellation.Token));
 		}
 
 		public Task ConnectHost(string roomName) => ConnectHost(roomName, new CancellationTokenSource(10000).Token);
@@ -71,7 +71,7 @@ namespace SRNet.Unity
 		{
 			InitConnect(token);
 			var room = await DiscoveryUtil.GetRoom(roomName, token);
-			SetConnection(await Connection.Connect(room, token: m_Cancellation.Token));
+			SetConnection(await Connection.ConnectToRoom(room, token: m_Cancellation.Token));
 		}
 
 		protected void InitConnect(CancellationToken token)
@@ -163,7 +163,7 @@ namespace SRNet.Unity
 				return;
 			}
 
-			while (m_Connection.TryReceive(out var message))
+			while (m_Connection.Update(out var message))
 			{
 				OnRawMessage?.Invoke(message);
 
