@@ -163,7 +163,7 @@ namespace SRNet.Unity
 				return;
 			}
 
-			while (m_Connection.Update(out var message))
+			while (m_Connection.TryReadMessage(out var message))
 			{
 				OnRawMessage?.Invoke(message);
 

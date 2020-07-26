@@ -213,7 +213,7 @@ namespace SRNet.Sample
 						Transition(Event.Error, new Exception("切断されました"));
 						return;
 					}
-					while (m_Connection.Update(out var message))
+					while (m_Connection.TryReadMessage(out var message))
 					{
 						m_Receive = "From" + message.Peer.ConnectionId + "Receive:" + System.Text.Encoding.UTF8.GetString(message);
 					}

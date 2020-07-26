@@ -75,7 +75,7 @@ namespace SRNet.Tests
 			{
 				try
 				{
-					if (m_Connection.PollUpdate(out var message, TimeSpan.FromSeconds(1)))
+					if (m_Connection.PollTryReadMessage(out var message, TimeSpan.FromSeconds(1)))
 					{
 						Console.WriteLine(System.Text.Encoding.UTF8.GetString(message));
 						message.ResponseTo(message);

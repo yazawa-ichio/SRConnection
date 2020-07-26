@@ -137,29 +137,25 @@ namespace SRNet
 			}
 		}
 
-
-		DateTime m_PrevTime = DateTime.UtcNow;
-		public void UpdateStatus()
+		public void ManualTimeUpdate()
 		{
 			lock (m_Impl)
 			{
-				m_StatusUpdater.OnUpdate();
-				var now = DateTime.UtcNow;
-				var delta = now - m_PrevTime;
-				if (delta < TimeSpan.Zero) delta = TimeSpan.Zero;
-				if (delta > TimeSpan.FromMilliseconds(1000)) delta = TimeSpan.FromMilliseconds(1000);
-				m_PrevTime = now;
-				m_Impl.OnUpdateStatus(delta);
-				m_Channel.OnUpdateStatus(delta);
-				if (!m_InitRead)
+				var tmp = m_HandlePeerEvent;
+				try
 				{
-					PreReadMessage();
+					m_HandlePeerEvent = true;
+					UpdateStatus();
+				}
+				finally
+				{
+					m_HandlePeerEvent = tmp;
 				}
 			}
 		}
 
 		bool m_HandlePeerEvent;
-		public bool Update(out Message message)
+		public bool TryReadMessage(out Message message)
 		{
 			lock (m_Impl)
 			{
@@ -184,14 +180,14 @@ namespace SRNet
 			}
 		}
 
-		public bool PollUpdate(out Message message, TimeSpan time)
+		public bool PollTryReadMessage(out Message message, TimeSpan time)
 		{
-			return PollUpdate(out message, (int)(time.TotalMilliseconds * 1000));
+			return PollTryReadMessage(out message, (int)(time.TotalMilliseconds * 1000));
 		}
 
-		public bool PollUpdate(out Message message, int microSeconds)
+		public bool PollTryReadMessage(out Message message, int microSeconds)
 		{
-			if (Update(out message))
+			if (TryReadMessage(out message))
 			{
 				return true;
 			}
@@ -199,7 +195,7 @@ namespace SRNet
 			{
 				return false;
 			}
-			return Update(out message);
+			return TryReadMessage(out message);
 		}
 
 		void OnAdd(PeerEntry entry)
@@ -271,6 +267,26 @@ namespace SRNet
 			}
 			message = default;
 			return false;
+		}
+
+		DateTime m_PrevTime = DateTime.UtcNow;
+		internal void UpdateStatus()
+		{
+			lock (m_Impl)
+			{
+				m_StatusUpdater.OnUpdate();
+				var now = DateTime.UtcNow;
+				var delta = now - m_PrevTime;
+				if (delta < TimeSpan.Zero) delta = TimeSpan.Zero;
+				if (delta > TimeSpan.FromMilliseconds(1000)) delta = TimeSpan.FromMilliseconds(1000);
+				m_PrevTime = now;
+				m_Impl.OnUpdateStatus(delta);
+				m_Channel.OnUpdateStatus(delta);
+				if (!m_InitRead)
+				{
+					PreReadMessage();
+				}
+			}
 		}
 
 	}

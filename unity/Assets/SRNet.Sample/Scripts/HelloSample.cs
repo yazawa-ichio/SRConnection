@@ -50,13 +50,13 @@ namespace SRNet.Sample
 
 		void Update()
 		{
-			while (m_Server.Update(out var message))
+			while (m_Server.TryReadMessage(out var message))
 			{
 				var text = Encoding.UTF8.GetString(message);
 				var buf = Encoding.UTF8.GetBytes("Hello " + text);
 				message.ResponseTo(buf);
 			}
-			while (m_Client != null && m_Client.Update(out var message))
+			while (m_Client != null && m_Client.TryReadMessage(out var message))
 			{
 				m_ServerMessage = Encoding.UTF8.GetString(message);
 				Debug.Log("From " + message.Peer.ConnectionId + " : " + m_ServerMessage);

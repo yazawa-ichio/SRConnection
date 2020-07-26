@@ -39,9 +39,9 @@ namespace SRNet.Tests
 					conn1.Server.Send(To(text));
 					conn2.Server.Send(To(text));
 					Message message;
-					while (!conn1.PollUpdate(out message, TimeSpan.FromSeconds(1))) ;
+					while (!conn1.PollTryReadMessage(out message, TimeSpan.FromSeconds(1))) ;
 					Assert.AreEqual(text, To(message));
-					while (!conn2.PollUpdate(out message, TimeSpan.FromSeconds(1))) ;
+					while (!conn2.PollTryReadMessage(out message, TimeSpan.FromSeconds(1))) ;
 					Assert.AreEqual(text, To(message));
 				}
 			}
@@ -76,7 +76,7 @@ namespace SRNet.Tests
 							var randam = System.Convert.ToBase64String(Random.GenBytes(1000));
 							conn.Server.Send(To(randam));
 							Message message;
-							while (!conn.PollUpdate(out message, TimeSpan.FromSeconds(1))) ;
+							while (!conn.PollTryReadMessage(out message, TimeSpan.FromSeconds(1))) ;
 							Assert.AreEqual(randam, To(message));
 						}
 					};
@@ -127,7 +127,7 @@ namespace SRNet.Tests
 				string msg3 = null;
 				while (!conn1.Disposed)
 				{
-					if (conn1.Update(out var m))
+					if (conn1.TryReadMessage(out var m))
 					{
 						Assert.IsNull(msg1);
 						msg1 = To(m);
@@ -135,7 +135,7 @@ namespace SRNet.Tests
 				}
 				while (!conn2.Disposed)
 				{
-					if (conn2.Update(out var m))
+					if (conn2.TryReadMessage(out var m))
 					{
 						Assert.IsNull(msg2);
 						msg2 = To(m);
@@ -143,7 +143,7 @@ namespace SRNet.Tests
 				}
 				while (!conn3.Disposed)
 				{
-					if (conn3.Update(out var m))
+					if (conn3.TryReadMessage(out var m))
 					{
 						Assert.IsNull(msg3);
 						msg3 = To(m);
@@ -164,12 +164,12 @@ namespace SRNet.Tests
 				server.Conn.Reliable.Target(conn.SelfId).Send(To("PeerChannelAccessor"));
 
 				Message message;
-				while (!conn.PollUpdate(out message, TimeSpan.FromSeconds(1))) ;
+				while (!conn.PollTryReadMessage(out message, TimeSpan.FromSeconds(1))) ;
 				Assert.AreEqual("PeerChannelAccessor", To(message), "PeerChannelAccessor経由で送信");
 				Assert.AreEqual(DefaultChannel.Reliable, message.ChannelId, "PeerChannelAccessor経由で送信");
 
 				message.PeerChannel.Send(To("Message.PeerChannelAccessor"));
-				while (!conn.PollUpdate(out message, TimeSpan.FromSeconds(1))) ;
+				while (!conn.PollTryReadMessage(out message, TimeSpan.FromSeconds(1))) ;
 				Assert.AreEqual("Message.PeerChannelAccessor", To(message), "MessageのPeerChannelAccessor経由で送信。エコーが返る");
 
 
@@ -219,28 +219,28 @@ namespace SRNet.Tests
 						conn1.Send(host.SelfId, To(text));
 						conn2.Send(host.SelfId, To(text));
 						Message message;
-						while (!conn1.PollUpdate(out message, TimeSpan.FromSeconds(1))) ;
+						while (!conn1.PollTryReadMessage(out message, TimeSpan.FromSeconds(1))) ;
 						Assert.AreEqual(text, To(message));
 						Assert.AreEqual(host.SelfId, message.Peer.ConnectionId);
-						while (!conn2.PollUpdate(out message, TimeSpan.FromSeconds(1))) ;
+						while (!conn2.PollTryReadMessage(out message, TimeSpan.FromSeconds(1))) ;
 						Assert.AreEqual(text, To(message));
 						Assert.AreEqual(host.SelfId, message.Peer.ConnectionId);
 
 						conn1.Send(conn2.SelfId, To(text));
 						conn2.Send(conn1.SelfId, To(text));
-						while (!conn1.PollUpdate(out message, TimeSpan.FromSeconds(1))) ;
+						while (!conn1.PollTryReadMessage(out message, TimeSpan.FromSeconds(1))) ;
 						Assert.AreEqual(text, To(message));
 						Assert.AreEqual(conn2.SelfId, message.Peer.ConnectionId);
-						while (!conn2.PollUpdate(out message, TimeSpan.FromSeconds(1))) ;
+						while (!conn2.PollTryReadMessage(out message, TimeSpan.FromSeconds(1))) ;
 						Assert.AreEqual(text, To(message));
 						Assert.AreEqual(conn1.SelfId, message.Peer.ConnectionId);
 
 						host.Send(conn1.SelfId, To(text));
 						host.Send(conn2.SelfId, To(text));
-						while (!conn1.PollUpdate(out message, TimeSpan.FromSeconds(1))) ;
+						while (!conn1.PollTryReadMessage(out message, TimeSpan.FromSeconds(1))) ;
 						Assert.AreEqual(text, To(message));
 						Assert.AreEqual(host.SelfId, message.Peer.ConnectionId);
-						while (!conn2.PollUpdate(out message, TimeSpan.FromSeconds(1))) ;
+						while (!conn2.PollTryReadMessage(out message, TimeSpan.FromSeconds(1))) ;
 						Assert.AreEqual(text, To(message));
 						Assert.AreEqual(host.SelfId, message.Peer.ConnectionId);
 
@@ -346,7 +346,7 @@ namespace SRNet.Tests
 				{
 					await Task.Delay(100);
 					conn.Reliable.Broadcast(System.Text.Encoding.UTF8.GetBytes("Message" + DateTime.Now));
-					while (conn.Update(out var _))
+					while (conn.TryReadMessage(out var _))
 					{
 						success = true;
 					}
