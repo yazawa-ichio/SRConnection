@@ -31,12 +31,16 @@ namespace SRNet.Stun
 				{
 					if (client.Client.Poll(1000 * 1000, SelectMode.SelectRead))
 					{
+						if (token.IsCancellationRequested)
+						{
+							return;
+						}
 						IPEndPoint remoteEP = null;
 						var buf = client.Receive(ref remoteEP);
 						query.TryReceive(buf);
 					}
 				}
-			});
+			}, token);
 			return task;
 		}
 

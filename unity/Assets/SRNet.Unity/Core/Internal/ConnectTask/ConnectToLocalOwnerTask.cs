@@ -63,7 +63,7 @@ namespace SRNet
 
 					m_Token.ThrowIfCancellationRequested();
 					var impl = new P2PConnectionImpl(m_SelfId, m_Socket, peer, m_EncryptorGenerator);
-					impl.UpdateConnectPeerList(res.List.Peers, true);
+					impl.P2PTask.UpdateList(res.List.Peers, true);
 					return impl;
 				}
 			}

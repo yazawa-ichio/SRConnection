@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 
 namespace SRNet
 {
@@ -11,12 +12,6 @@ namespace SRNet
 		public int SelfId => m_Impl.SelfId;
 
 		public bool Disposed => m_Impl.Disposed;
-
-		public bool AutoDisposeOnDisconnectOwner
-		{
-			get => m_Impl.DisposeOnDisconnectOwner;
-			set => m_Impl.DisposeOnDisconnectOwner = value;
-		}
 
 		public ICollection<Peer> Peers => m_Peers.Values;
 
@@ -28,42 +23,52 @@ namespace SRNet
 
 		public P2PAccessor P2P { get; private set; }
 
+		public readonly RuntimeConfig Config;
+
 		public event Action<PeerEvent> OnPeerEvent;
 
 		ConnectionImpl m_Impl;
 		Queue<PeerEvent> m_PeerEvent = new Queue<PeerEvent>();
 		ConcurrentDictionary<int, Peer> m_Peers = new ConcurrentDictionary<int, Peer>();
-		ChannelContext m_ChannelContext;
+		ChannelManager m_Channel;
+		ConnectionStatusUpdater m_StatusUpdater;
+		bool m_InitRead;
+		byte[] m_ReceiveBuffer = new byte[Fragment.Size + 100];
+		Queue<Message> m_BufferingMessage = new Queue<Message>();
 
 		internal Connection(ConnectionImpl impl)
 		{
-			m_ChannelContext = new ChannelContext(impl, m_Peers);
-			Channel = new ChannelMapAccessor(m_ChannelContext);
+			m_Channel = new ChannelManager(impl);
+			m_StatusUpdater = new ConnectionStatusUpdater(this);
+			Channel = new ChannelMapAccessor(this, m_Channel);
+
 			Reliable = Channel.Reliable;
 			Unreliable = Channel.Unreliable;
 			m_Impl = impl;
 			m_Impl.OnAddPeer += OnAdd;
 			m_Impl.OnRemotePeer += OnRemove;
-			m_Impl.OnPostTimerUpdate += OnPostTimerUpdate;
+			if (impl.UseP2P)
+			{
+				P2P = new P2PAccessor(m_Impl);
+			}
+
+			Config = new RuntimeConfig(this, m_Impl, m_StatusUpdater);
+
 			foreach (var peer in m_Impl.GetPeers())
 			{
 				OnAdd(peer);
 			}
-			if (impl.UseP2P)
-			{
-				P2P = new P2PAccessor(m_Impl, m_ChannelContext);
-			}
-		}
 
-		void OnPostTimerUpdate(DateTime now, TimeSpan delta)
-		{
-			m_ChannelContext.Update(delta);
 		}
 
 		public void Dispose()
 		{
-			m_ChannelContext.Dispose();
-			m_Impl.Dispose();
+			lock (m_Impl)
+			{
+				m_Channel.Dispose();
+				m_Impl.Dispose();
+				m_StatusUpdater.Dispose();
+			}
 		}
 
 		public Peer GetPeer(int id)
@@ -84,30 +89,93 @@ namespace SRNet
 
 		public void Send(int connectionId, byte[] buf, int offset, int size, bool reliable = true)
 		{
-			var channel = reliable ? DefaultChannel.Unreliable : DefaultChannel.Unreliable;
-			m_ChannelContext.Send(channel, connectionId, buf, offset, size);
+			lock (m_Impl)
+			{
+				var channel = reliable ? DefaultChannel.Unreliable : DefaultChannel.Unreliable;
+				m_Channel.Send(channel, connectionId, buf, offset, size);
+			}
+		}
+
+		public void ChannelSend(short channel, int connectionId, byte[] buf, int offset, int size)
+		{
+			lock (m_Impl)
+			{
+				m_Channel.Send(channel, connectionId, buf, offset, size);
+			}
+		}
+
+		public void ChannelSend<T>(short channel, int connectionId, Action<Stream, T> write, in T obj)
+		{
+			lock (m_Impl)
+			{
+				m_Channel.Send(channel, connectionId, write, in obj);
+			}
+		}
+
+		public void ChannelBroadcast(short channel, byte[] buf, int offset, int size)
+		{
+			lock (m_Impl)
+			{
+				m_Channel.Broadcast(channel, buf, offset, size);
+			}
+		}
+
+		public void ChannelBroadcast<T>(short channel, Action<Stream, T> write, in T obj)
+		{
+			lock (m_Impl)
+			{
+				m_Channel.Broadcast(channel, write, in obj);
+			}
 		}
 
 		public void BroadcastDisconnect()
 		{
-			m_Impl.BroadcastDisconnect();
-			Dispose();
+			lock (m_Impl)
+			{
+				m_Impl.BroadcastDisconnect();
+				Dispose();
+			}
+		}
+
+
+		DateTime m_PrevTime = DateTime.UtcNow;
+		public void UpdateStatus()
+		{
+			lock (m_Impl)
+			{
+				m_StatusUpdater.OnUpdate();
+				var now = DateTime.UtcNow;
+				var delta = now - m_PrevTime;
+				if (delta < TimeSpan.Zero) delta = TimeSpan.Zero;
+				if (delta > TimeSpan.FromMilliseconds(1000)) delta = TimeSpan.FromMilliseconds(1000);
+				m_PrevTime = now;
+				m_Impl.OnUpdateStatus(delta);
+				m_Channel.OnUpdateStatus(delta);
+				if (!m_InitRead)
+				{
+					PreReadMessage();
+				}
+			}
 		}
 
 		bool m_HandlePeerEvent;
-		public bool TryReceive(out Message message)
+		public bool Update(out Message message)
 		{
-			lock (m_PeerEvent)
+			lock (m_Impl)
 			{
 				try
 				{
+					m_InitRead = true;
+					m_StatusUpdater.OnPreRead();
 					while (m_PeerEvent.Count > 0)
 					{
 						var e = m_PeerEvent.Dequeue();
 						OnPeerEvent?.Invoke(e);
 					}
 					m_HandlePeerEvent = true;
-					return m_ChannelContext.TryReadMessage(out message);
+					var ret = TryReadChannelMessage(out message, false);
+					m_StatusUpdater.TryUpdate(!ret);
+					return ret;
 				}
 				finally
 				{
@@ -116,55 +184,93 @@ namespace SRNet
 			}
 		}
 
-		public bool TryPollReceive(out Message message, TimeSpan time)
+		public bool PollUpdate(out Message message, TimeSpan time)
 		{
-			return TryPollReceive(out message, (int)(time.TotalMilliseconds * 1000));
+			return PollUpdate(out message, (int)(time.TotalMilliseconds * 1000));
 		}
 
-		public bool TryPollReceive(out Message message, int microSeconds)
+		public bool PollUpdate(out Message message, int microSeconds)
 		{
-			if (TryReceive(out message))
+			if (Update(out message))
 			{
 				return true;
 			}
-			return (m_Impl.Poll(microSeconds) && TryReceive(out message));
+			if (!m_Impl.Poll(microSeconds))
+			{
+				return false;
+			}
+			return Update(out message);
 		}
 
 		void OnAdd(PeerEntry entry)
 		{
-			lock (m_PeerEvent)
+			var peer = new Peer(entry, this, m_Impl);
+			m_Peers.TryAdd(peer.ConnectionId, peer);
+			m_Channel.AddPeer(entry.ConnectionId);
+			var e = new PeerEvent(PeerEvent.Type.Add, peer);
+			if (m_HandlePeerEvent)
 			{
-				var peer = new Peer(entry, m_Impl, m_ChannelContext);
-				m_Peers.TryAdd(peer.ConnectionId, peer);
-				m_ChannelContext.AddPeer(entry.ConnectionId);
-				var e = new PeerEvent(PeerEvent.Type.Add, peer);
-				if (m_HandlePeerEvent)
-				{
-					OnPeerEvent?.Invoke(e);
-				}
-				else
-				{
-					m_PeerEvent.Enqueue(e);
-				}
+				OnPeerEvent?.Invoke(e);
+			}
+			else
+			{
+				m_PeerEvent.Enqueue(e);
 			}
 		}
 
 		void OnRemove(PeerEntry entry)
 		{
-			lock (m_PeerEvent)
+			m_Peers.TryRemove(entry.ConnectionId, out var peer);
+			m_Channel.RemovePeer(entry.ConnectionId);
+			var e = new PeerEvent(PeerEvent.Type.Remove, peer);
+			if (m_HandlePeerEvent)
 			{
-				m_Peers.TryRemove(entry.ConnectionId, out var peer);
-				m_ChannelContext.RemovePeer(entry.ConnectionId);
-				var e = new PeerEvent(PeerEvent.Type.Remove, peer);
-				if (m_HandlePeerEvent)
+				OnPeerEvent?.Invoke(e);
+			}
+			else
+			{
+				m_PeerEvent.Enqueue(e);
+			}
+		}
+
+
+		void PreReadMessage()
+		{
+			TryReadChannelMessage(out _, true);
+		}
+
+		bool TryReadChannelMessage(out Message message, bool buffering)
+		{
+			while (!buffering && m_BufferingMessage.Count > 0)
+			{
+				message = m_BufferingMessage.Dequeue();
+				//切断済みのPeerのメッセージは飛ばさない
+				if (!m_Peers.ContainsKey(message.Peer.ConnectionId))
 				{
-					OnPeerEvent?.Invoke(e);
+					continue;
 				}
-				else
+				return true;
+			}
+			int size = 0;
+			int id = 0;
+			while (m_Impl.TryReceiveFrom(m_ReceiveBuffer, 0, ref size, ref id))
+			{
+				if (!TryGetPeer(id, out var peer))
 				{
-					m_PeerEvent.Enqueue(e);
+					continue;
+				}
+				if (m_Channel.TryRead(peer, m_ReceiveBuffer, size, out message))
+				{
+					if (buffering)
+					{
+						m_BufferingMessage.Enqueue(message.Copy());
+						continue;
+					}
+					return true;
 				}
 			}
+			message = default;
+			return false;
 		}
 
 	}

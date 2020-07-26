@@ -6,37 +6,37 @@ namespace SRNet.Channel
 	public readonly struct ChannelAccessor
 	{
 		public readonly short Id;
-		readonly ChannelContext m_Context;
+		readonly Connection m_Conn;
 
-		internal ChannelAccessor(short channel, ChannelContext context)
+		internal ChannelAccessor(short channel, Connection conn)
 		{
 			Id = channel;
-			m_Context = context;
+			m_Conn = conn;
 		}
 
 		public PeerChannelAccessor Target(int connectionId)
 		{
-			return new PeerChannelAccessor(Id, connectionId, m_Context);
+			return new PeerChannelAccessor(Id, connectionId, m_Conn);
 		}
 
 		public PeerChannelAccessor Target(Peer peer)
 		{
-			return new PeerChannelAccessor(Id, peer.ConnectionId, m_Context);
+			return new PeerChannelAccessor(Id, peer.ConnectionId, m_Conn);
 		}
 
 		public void Broadcast(byte[] buf)
 		{
-			m_Context.Broadcast(Id, buf, 0, buf.Length);
+			m_Conn.ChannelBroadcast(Id, buf, 0, buf.Length);
 		}
 
 		public void Broadcast(byte[] buf, int offset, int size)
 		{
-			m_Context.Broadcast(Id, buf, offset, size);
+			m_Conn.ChannelBroadcast(Id, buf, offset, size);
 		}
 
 		public void Broadcast<T>(Action<Stream, T> write, in T obj)
 		{
-			m_Context.Broadcast(Id, write, obj);
+			m_Conn.ChannelBroadcast(Id, write, obj);
 		}
 
 		public static implicit operator short(ChannelAccessor channel)

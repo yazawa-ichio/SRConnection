@@ -57,49 +57,37 @@ namespace SRNet
 
 		void SendHolePunch()
 		{
-			lock (m_Connection.m_Socket)
+			m_Connection.m_Socket.Send(Array.Empty<byte>(), 0, 0, m_RemoteEP);
+			if (m_LocalEP != null)
 			{
-				m_Connection.m_Socket.Send(Array.Empty<byte>(), 0, 0, m_RemoteEP);
-				if (m_LocalEP != null)
-				{
-					m_Connection.m_Socket.Send(Array.Empty<byte>(), 0, 0, m_LocalEP);
-				}
+				m_Connection.m_Socket.Send(Array.Empty<byte>(), 0, 0, m_LocalEP);
 			}
 		}
 
 		void SendHello()
 		{
-			lock (m_Connection.m_Socket)
+			var size = new PeerToPeerHello(m_Connection.SelfId, null).Pack(m_Connection.m_SendBuffer);
+			m_Connection.m_Socket.Send(m_Connection.m_SendBuffer, 0, size, m_RemoteEP);
+			if (m_LocalEP != null)
 			{
-				var size = new PeerToPeerHello(m_Connection.SelfId, null).Pack(m_Connection.m_SendBuffer);
-				m_Connection.m_Socket.Send(m_Connection.m_SendBuffer, 0, size, m_RemoteEP);
-				if (m_LocalEP != null)
-				{
-					m_Connection.m_Socket.Send(m_Connection.m_SendBuffer, 0, size, m_LocalEP);
-				}
+				m_Connection.m_Socket.Send(m_Connection.m_SendBuffer, 0, size, m_LocalEP);
 			}
 		}
 
 		void SendHandshake()
 		{
-			lock (m_Connection.m_Socket)
+			m_Connection.m_Socket.Send(m_HandshakePacket, 0, m_HandshakePacket.Length, m_RemoteEP);
+			if (m_LocalEP != null)
 			{
-				m_Connection.m_Socket.Send(m_HandshakePacket, 0, m_HandshakePacket.Length, m_RemoteEP);
-				if (m_LocalEP != null)
-				{
-					m_Connection.m_Socket.Send(m_HandshakePacket, 0, m_HandshakePacket.Length, m_LocalEP);
-				}
+				m_Connection.m_Socket.Send(m_HandshakePacket, 0, m_HandshakePacket.Length, m_LocalEP);
 			}
 		}
 
 		public void OnPeerToPeerHello(PeerToPeerHello packet, IPEndPoint remoteEP)
 		{
-			lock (m_Connection.m_Socket)
+			if (m_LocalEP != null && remoteEP.Address.Equals(m_LocalEP.Address) && remoteEP.Port == m_LocalEP.Port)
 			{
-				if (m_LocalEP != null && remoteEP.Address.Equals(m_LocalEP.Address) && remoteEP.Port == m_LocalEP.Port)
-				{
-					m_LocalEP = null;
-				}
+				m_LocalEP = null;
 			}
 			m_RemoteEP = remoteEP;
 			m_Request = new PeerToPeerRequest(m_Connection.SelfId, packet.Cookie);

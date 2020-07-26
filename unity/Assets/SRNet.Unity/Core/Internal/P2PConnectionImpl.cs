@@ -9,7 +9,6 @@ namespace SRNet
 	{
 		PeerEntry m_Owner;
 		bool m_IsOwner;
-		object m_PeerToPeerListLock = new object();
 		bool m_PeerToPeerListDirty = true;
 		PeerToPeerList m_PeerToPeerList = default;
 		DiscoveryService m_DiscoveryService;
@@ -24,17 +23,14 @@ namespace SRNet
 			m_CookieProvider.Update();
 			m_Socket.Bind(new IPEndPoint(config.Address, 0), false);
 			SelfId = Random.GenInt();
-			m_P2PTaskManager.CreateHostRandamKey();
-			var randamKey = m_P2PTaskManager.GetHostRandamKey();
+			P2PTask.CreateHostRandamKey();
+			var randamKey = P2PTask.GetHostRandamKey();
 			var data = new PeerToPeerRoomData(SelfId, m_CookieProvider.Cookie, randamKey).Pack();
 			m_DiscoveryService = new DiscoveryService(config.RoomName, m_Socket.LocalEP, data, config.DiscoveryServicePort);
 			m_DiscoveryService.OnHolePunchRequest += (ep) =>
 			{
-				lock (m_Socket)
-				{
-					var packet = new DiscoveryHolePunch().Pack();
-					m_Socket.Send(packet, 0, packet.Length, ep);
-				}
+				var packet = new DiscoveryHolePunch().Pack();
+				m_Socket.Send(packet, 0, packet.Length, ep);
 			};
 			m_DiscoveryService.Start(config.DiscoveryQueryMatch);
 		}
@@ -53,7 +49,7 @@ namespace SRNet
 			m_CookieProvider.Update();
 			m_IsOwner = false;
 			SelfId = setting.SelfId;
-			UpdateConnectPeerList(setting.Peers, true);
+			P2PTask.UpdateList(setting.Peers, true);
 		}
 
 		protected override void Dispose(bool disposing)
@@ -84,9 +80,9 @@ namespace SRNet
 			m_DiscoveryService?.Dispose();
 		}
 
-		protected override void TimerUpdate(TimeSpan delta)
+		public override void OnUpdateStatus(TimeSpan delta)
 		{
-			base.TimerUpdate(delta);
+			base.OnUpdateStatus(delta);
 			if (IsHost && !Disposed)
 			{
 				UpdateP2PList();
@@ -111,30 +107,21 @@ namespace SRNet
 		void UpdateP2PList()
 		{
 			if (m_SendP2PList == null) m_SendP2PList = SendP2PList;
-			lock (m_PeerToPeerListLock)
+			if (m_PeerToPeerListDirty)
 			{
-				if (m_PeerToPeerListDirty)
-				{
-					m_PeerToPeerListDirty = false;
-					var revision = m_PeerToPeerList.Revision;
-					revision++;
-					var randamKey = m_P2PTaskManager.GetHostRandamKey();
-					m_PeerToPeerList = new PeerToPeerList(SelfId, revision, m_PeerManager.CreatePeerInfoList(randamKey));
-				}
+				m_PeerToPeerListDirty = false;
+				var revision = m_PeerToPeerList.Revision;
+				revision++;
+				var randamKey = P2PTask.GetHostRandamKey();
+				m_PeerToPeerList = new PeerToPeerList(SelfId, revision, m_PeerManager.CreatePeerInfoList(randamKey));
 			}
-			lock (m_Socket)
-			{
-				m_PeerManager.ForEach(m_SendP2PList, m_PeerToPeerList);
-			}
+			m_PeerManager.ForEach(m_SendP2PList, m_PeerToPeerList);
 		}
 
 		public override bool TryGetPeerToPeerList(out PeerToPeerList list)
 		{
-			lock (m_PeerToPeerListLock)
-			{
-				list = m_PeerToPeerList;
-				return IsHost;
-			}
+			list = m_PeerToPeerList;
+			return IsHost;
 		}
 
 	}

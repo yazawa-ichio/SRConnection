@@ -156,10 +156,7 @@ namespace SRNet.Stun
 			var timeoutAt = DateTime.UtcNow.Add(m_Timeout);
 			while (timeoutAt > DateTime.UtcNow)
 			{
-				lock (m_Socket)
-				{
-					m_Socket.SendTo(buf, size, SocketFlags.None, remoteEP);
-				}
+				m_Socket.SendTo(buf, size, SocketFlags.None, remoteEP);
 				await Task.WhenAny(m_Future.Task, Task.Delay(200, m_Token));
 				if (m_Future.Task.IsCompleted)
 				{

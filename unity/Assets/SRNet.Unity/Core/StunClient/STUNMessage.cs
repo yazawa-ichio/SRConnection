@@ -32,24 +32,31 @@ namespace SRNet.Stun
 
 		public bool TryParse(byte[] buffer)
 		{
-			int offset = 0;
-			MessageType = (MessageType)NetBinaryUtil.ReadShort(buffer, ref offset);
-			int messageLength = (ushort)NetBinaryUtil.ReadShort(buffer, ref offset);
-			if (MagicCookie != NetBinaryUtil.ReadUInt(buffer, ref offset))
+			try
+			{
+				int offset = 0;
+				MessageType = (MessageType)NetBinaryUtil.ReadShort(buffer, ref offset);
+				int messageLength = (ushort)NetBinaryUtil.ReadShort(buffer, ref offset);
+				if (MagicCookie != NetBinaryUtil.ReadUInt(buffer, ref offset))
+				{
+					return false;
+				}
+				TransactionId = NetBinaryUtil.ReadBytes(buffer, TransactionIdSize, ref offset);
+				Attributes.Clear();
+				while (offset < messageLength + 20)
+				{
+					var attr = GetAttribute(buffer, ref offset);
+					if (attr != null)
+					{
+						Attributes.Add(attr);
+					}
+				}
+				return true;
+			}
+			catch
 			{
 				return false;
 			}
-			TransactionId = NetBinaryUtil.ReadBytes(buffer, TransactionIdSize, ref offset);
-			Attributes.Clear();
-			while (offset < messageLength + 20)
-			{
-				var attr = GetAttribute(buffer, ref offset);
-				if (attr != null)
-				{
-					Attributes.Add(attr);
-				}
-			}
-			return true;
 		}
 
 

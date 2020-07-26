@@ -106,20 +106,13 @@ namespace SRNet
 
 		public void Send(byte[] buf, int offest, int size, EndPoint remoteEP)
 		{
-			lock (m_Socket)
-			{
-				m_Socket.SendTo(buf, offest, size, SocketFlags.None, remoteEP);
-			}
+			m_Socket.SendTo(buf, offest, size, SocketFlags.None, remoteEP);
 		}
 
 		public bool Broadcast(byte[] buf, int offest, int size, int port)
 		{
-			lock (m_Socket)
-			{
-				return m_Socket.SendTo(buf, offest, size, SocketFlags.None, new IPEndPoint(IPAddress.Broadcast, port)) > 0;
-			}
+			return m_Socket.SendTo(buf, offest, size, SocketFlags.None, new IPEndPoint(IPAddress.Broadcast, port)) > 0;
 		}
-
 
 		public Task<StunResult> StunQuery(string host, int port, TimeSpan timeout)
 		{

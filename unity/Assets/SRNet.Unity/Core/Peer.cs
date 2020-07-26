@@ -10,15 +10,17 @@ namespace SRNet
 
 		public int ConnectionId => m_Entry.ConnectionId;
 
-		PeerEntry m_Entry;
-		ConnectionImpl m_Connection;
-		ChannelContext m_Channel;
+		public TimeSpan HeartbeatTimeout { get => m_Entry.Timeout; set => m_Entry.Timeout = value; }
 
-		internal Peer(PeerEntry entry, ConnectionImpl connection, ChannelContext channel)
+		PeerEntry m_Entry;
+		Connection m_Connection;
+		ConnectionImpl m_Impl;
+
+		internal Peer(PeerEntry entry, Connection connection, ConnectionImpl impl)
 		{
 			m_Entry = entry;
 			m_Connection = connection;
-			m_Channel = channel;
+			m_Impl = impl;
 		}
 
 		public void Send(byte[] buf, bool reliable = true)
@@ -29,27 +31,31 @@ namespace SRNet
 		public void Send(byte[] buf, int offset, int size, bool reliable = true)
 		{
 			short channel = reliable ? DefaultChannel.Reliable : DefaultChannel.Unreliable;
-			m_Channel.Send(channel, m_Entry.ConnectionId, buf, offset, size);
+			m_Connection.ChannelSend(channel, m_Entry.ConnectionId, buf, offset, size);
 		}
 
 		public void Send<T>(Action<Stream, T> write, in T obj, bool reliable = true)
 		{
 			short channel = reliable ? DefaultChannel.Reliable : DefaultChannel.Unreliable;
-			m_Channel.Send(channel, m_Entry.ConnectionId, write, obj);
+			m_Connection.ChannelSend(channel, m_Entry.ConnectionId, write, obj);
 		}
 
-		public PeerChannelAccessor Channel(short channel) => new PeerChannelAccessor(channel, m_Entry.ConnectionId, m_Channel);
+		public PeerChannelAccessor Channel(short channel) => new PeerChannelAccessor(channel, m_Entry.ConnectionId, m_Connection);
 
-		internal ChannelAccessor ConnectionChannel(short channel) => new ChannelAccessor(channel, m_Channel);
-
-		public bool SendPing()
+		public bool Ping()
 		{
-			return m_Connection.SendPing(m_Entry.ConnectionId);
+			lock (m_Impl)
+			{
+				return m_Impl.SendPing(m_Entry.ConnectionId);
+			}
 		}
 
-		public bool SendDisconnect()
+		public bool Disconnect()
 		{
-			return m_Connection.SendDisconnect(m_Entry.ConnectionId);
+			lock (m_Impl)
+			{
+				return m_Impl.SendDisconnect(m_Entry.ConnectionId);
+			}
 		}
 
 		public bool Equals(Peer other)

@@ -1,5 +1,4 @@
-﻿using SRNet.Channel;
-using SRNet.Packet;
+﻿using SRNet.Packet;
 using SRNet.Stun;
 using System;
 using System.Threading;
@@ -10,43 +9,59 @@ namespace SRNet
 	public class P2PAccessor
 	{
 		ConnectionImpl m_Impl;
-		ChannelContext m_Channel;
 
-		internal P2PAccessor(ConnectionImpl impl, ChannelContext channel)
+		internal P2PAccessor(ConnectionImpl impl)
 		{
 			m_Impl = impl;
-			m_Channel = channel;
 		}
 
 		public void Connect(PeerInfo[] list, bool init = true)
 		{
-			m_Impl.UpdateConnectPeerList(list, init);
+			lock (m_Impl)
+			{
+				m_Impl.P2PTask.UpdateList(list, init);
+			}
 		}
 
 		public void Connect(PeerInfo info)
 		{
-			m_Impl.AddConnectPeer(info);
+			lock (m_Impl)
+			{
+				m_Impl.P2PTask.Add(info);
+			}
 		}
 
 		public Task WaitHandshake(CancellationToken token = default)
 		{
-			token.ThrowIfCancellationRequested();
-			return m_Impl.WaitHandshake(token);
+			lock (m_Impl)
+			{
+				token.ThrowIfCancellationRequested();
+				return m_Impl.P2PTask.WaitTaskComplete(token);
+			}
 		}
 
 		public void Cancel(int connectionId)
 		{
-			m_Impl.CancelP2PHandshake(connectionId);
+			lock (m_Impl)
+			{
+				m_Impl.P2PTask.Remove(connectionId);
+			}
 		}
 
 		public void Cancel()
 		{
-			m_Impl.UpdateConnectPeerList(Array.Empty<PeerInfo>(), true);
+			lock (m_Impl)
+			{
+				m_Impl.P2PTask.UpdateList(Array.Empty<PeerInfo>(), true);
+			}
 		}
 
 		public Task<StunResult> StunQuery(string host, int port, TimeSpan timeout)
 		{
-			return m_Impl.StunQuery(host, port, timeout);
+			lock (m_Impl)
+			{
+				return m_Impl.StunQuery(host, port, timeout);
+			}
 		}
 
 	}

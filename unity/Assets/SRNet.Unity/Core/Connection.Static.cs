@@ -25,16 +25,22 @@ namespace SRNet
 			return new P2PHostConnection(impl);
 		}
 
-		public static Task<ClientConnection> Connect(ServerConnectSettings settings) => Connect(settings, CancellationToken.None);
+		public static Task<ClientConnection> ConnectToServer(ServerConnectSettings settings)
+		{
+			return ConnectToServer(settings, CancellationToken.None);
+		}
 
-		public static async Task<ClientConnection> Connect(ServerConnectSettings settings, CancellationToken token)
+		public static async Task<ClientConnection> ConnectToServer(ServerConnectSettings settings, CancellationToken token)
 		{
 			return new ClientConnection(await new ConnectToServerTask(settings, token).Run());
 		}
 
-		public static Task<Connection> Connect(DiscoveryRoom room) => Connect(room, true, CancellationToken.None);
+		public static Task<Connection> ConnectToRoom(DiscoveryRoom room)
+		{
+			return ConnectToRoom(room, true, CancellationToken.None);
+		}
 
-		public static async Task<Connection> Connect(DiscoveryRoom room, bool waitAllHandshake = true, CancellationToken token = default)
+		public static async Task<Connection> ConnectToRoom(DiscoveryRoom room, bool waitAllHandshake = true, CancellationToken token = default)
 		{
 			var remoteEP = new IPEndPoint(room.Address, room.Port);
 			if (!PeerToPeerRoomData.TryUnpack(room.Data, room.Data.Length, out var data))
@@ -45,7 +51,10 @@ namespace SRNet
 			return await TryWaitAllHandshake(new Connection(impl), waitAllHandshake, token);
 		}
 
-		public static Task<Connection> P2PMatching(string url) => P2PMatching(url, null, CancellationToken.None, waitAllHandshake: true);
+		public static Task<Connection> P2PMatching(string url)
+		{
+			return P2PMatching(url, null, CancellationToken.None, waitAllHandshake: true);
+		}
 
 		public static async Task<Connection> P2PMatching(string url, string stunURL = null, CancellationToken token = default, bool waitAllHandshake = true)
 		{
@@ -53,7 +62,10 @@ namespace SRNet
 			return await TryWaitAllHandshake(new Connection(impl), waitAllHandshake, token);
 		}
 
-		public static Task<Connection> P2PMatching(Func<StunResult, CancellationToken, Task<P2PSettings>> func) => P2PMatching(func, null, CancellationToken.None, waitAllHandshake: true);
+		public static Task<Connection> P2PMatching(Func<StunResult, CancellationToken, Task<P2PSettings>> func)
+		{
+			return P2PMatching(func, null, CancellationToken.None, waitAllHandshake: true);
+		}
 
 		public static async Task<Connection> P2PMatching(Func<StunResult, CancellationToken, Task<P2PSettings>> func, string stunURL = null, CancellationToken token = default, bool waitAllHandshake = true)
 		{

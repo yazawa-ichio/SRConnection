@@ -5,7 +5,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
-using System.Threading;
 using System.Threading.Tasks;
 
 namespace SRNet
@@ -28,19 +27,15 @@ namespace SRNet
 		bool m_Disposed = false;
 		internal protected byte[] m_SendBuffer = new byte[MaxBufferSize];
 		protected byte[] m_ReceiveBuffer = new byte[MaxBufferSize];
-		Timer m_Timer;
-		DateTime m_PrevUpdateTime;
 		TimeSpan m_PingTimer;
 
 		protected CookieProvider m_CookieProvider = new CookieProvider();
 		protected PeerManager m_PeerManager;
-		protected PeerToPeerTaskManager m_P2PTaskManager;
+		public PeerToPeerTaskManager P2PTask { get; private set; }
 
 		public Action<PeerEntry> OnAddPeer;
 
 		public Action<PeerEntry> OnRemotePeer;
-
-		public Action<DateTime, TimeSpan> OnPostTimerUpdate;
 
 		public bool DisposeOnDisconnectOwner = true;
 
@@ -49,9 +44,7 @@ namespace SRNet
 			m_Socket = socket;
 			m_EncryptorGenerator = encryptorGenerator;
 			m_PeerManager = new PeerManager(this);
-			m_P2PTaskManager = new PeerToPeerTaskManager(this, m_CookieProvider, m_PeerManager);
-			m_PrevUpdateTime = DateTime.UtcNow;
-			m_Timer = new Timer(TimerUpdate, null, 100, 100);
+			P2PTask = new PeerToPeerTaskManager(this, m_CookieProvider, m_PeerManager);
 			m_CookieProvider.Update();
 		}
 
@@ -75,38 +68,7 @@ namespace SRNet
 			return m_PeerManager.GetPeers();
 		}
 
-		public IEnumerable<int> GetPeerIdList()
-		{
-			return m_PeerManager.GetPeers().Select(x => x.ConnectionId);
-		}
-
-		bool m_RunTimerUpdate;
-		void TimerUpdate(object _)
-		{
-			if (m_RunTimerUpdate) return;
-			try
-			{
-				m_RunTimerUpdate = true;
-				var now = DateTime.UtcNow;
-				var delta = now - m_PrevUpdateTime;
-				if (delta < TimeSpan.Zero) delta = TimeSpan.Zero;
-				if (delta > TimeSpan.FromMilliseconds(1000)) delta = TimeSpan.FromMilliseconds(1000);
-				m_PrevUpdateTime = now;
-				TimerUpdate(delta);
-				OnPostTimerUpdate?.Invoke(now, delta);
-			}
-			catch (Exception ex)
-			{
-				Log.Exception(ex);
-				Dispose();
-			}
-			finally
-			{
-				m_RunTimerUpdate = false;
-			}
-		}
-
-		protected virtual void TimerUpdate(TimeSpan delta)
+		public virtual void OnUpdateStatus(TimeSpan delta)
 		{
 			PeerUpdate(delta);
 		}
@@ -114,10 +76,7 @@ namespace SRNet
 		protected virtual void PeerUpdate(TimeSpan delta)
 		{
 			m_PeerManager.Update(delta);
-			lock (m_PeerManager)
-			{
-				m_P2PTaskManager.Update(delta);
-			}
+			P2PTask.Update(delta);
 			if (!IsHost)
 			{
 				m_PingTimer -= delta;
@@ -144,8 +103,6 @@ namespace SRNet
 		protected virtual void Dispose(bool disposing)
 		{
 			Log.Debug("Start Dispose {0}", disposing);
-			m_Timer?.Dispose();
-			m_Timer = null;
 			m_Socket?.Dispose();
 			m_Socket = null;
 			m_CookieProvider.Dispose();
@@ -161,10 +118,7 @@ namespace SRNet
 		{
 			if (m_PeerManager.TryGetValue(connectionId, out PeerEntry peer))
 			{
-				lock (m_Socket)
-				{
-					SendImpl(peer, buf, offset, size, encrypt);
-				}
+				SendImpl(peer, buf, offset, size, encrypt);
 				return true;
 			}
 			return false;
@@ -196,13 +150,10 @@ namespace SRNet
 		public bool SendPing(int connectionId)
 		{
 			Log.Trace("SendPing {0}", connectionId);
-			lock (m_Socket)
+			if (m_PeerManager.TryGetValue(connectionId, out var peer))
 			{
-				if (m_PeerManager.TryGetValue(connectionId, out var peer))
-				{
-					SendPingImpl(peer);
-					return true;
-				}
+				SendPingImpl(peer);
+				return true;
 			}
 			return false;
 		}
@@ -218,26 +169,20 @@ namespace SRNet
 		{
 			Log.Trace("BroadcastPing");
 			if (m_SendPing == null) m_SendPing = SendPingImpl;
-			lock (m_Socket)
-			{
-				m_PeerManager.ForEach(m_SendPing);
-			}
+			m_PeerManager.ForEach(m_SendPing);
 		}
 
 		public bool SendDisconnect(int connectionId)
 		{
 			Log.Info("SendDisconnect:{0}", connectionId);
-			lock (m_Socket)
+			if (m_PeerManager.TryGetValue(connectionId, out var peer))
 			{
-				if (m_PeerManager.TryGetValue(connectionId, out var peer))
-				{
-					var seq = peer.IncrementSendSequence();
-					var msg = new Disconnect(GetSendId(peer.ConnectionId), seq);
-					var size = msg.Pack(m_SendBuffer, peer.Encryptor);
-					m_Socket.Send(m_SendBuffer, 0, size, peer.EndPoint);
-					m_PeerManager.Remove(connectionId);
-					return true;
-				}
+				var seq = peer.IncrementSendSequence();
+				var msg = new Disconnect(GetSendId(peer.ConnectionId), seq);
+				var size = msg.Pack(m_SendBuffer, peer.Encryptor);
+				m_Socket.Send(m_SendBuffer, 0, size, peer.EndPoint);
+				m_PeerManager.Remove(connectionId);
+				return true;
 			}
 			return false;
 		}
@@ -245,20 +190,17 @@ namespace SRNet
 		public void BroadcastDisconnect()
 		{
 			Log.Info("BroadcastDisconnect");
-			lock (m_Socket)
+			var peers = m_PeerManager.GetPeers().ToArray();
+			foreach (var peer in peers)
 			{
-				var peers = m_PeerManager.GetPeers().ToArray();
-				foreach (var peer in peers)
-				{
-					var seq = peer.IncrementSendSequence();
-					var msg = new Disconnect(GetSendId(peer.ConnectionId), seq);
-					var size = msg.Pack(m_SendBuffer, peer.Encryptor);
-					m_Socket.Send(m_SendBuffer, 0, size, peer.EndPoint);
-				}
-				foreach (var peer in peers)
-				{
-					m_PeerManager.Remove(peer.ConnectionId);
-				}
+				var seq = peer.IncrementSendSequence();
+				var msg = new Disconnect(GetSendId(peer.ConnectionId), seq);
+				var size = msg.Pack(m_SendBuffer, peer.Encryptor);
+				m_Socket.Send(m_SendBuffer, 0, size, peer.EndPoint);
+			}
+			foreach (var peer in peers)
+			{
+				m_PeerManager.Remove(peer.ConnectionId);
 			}
 		}
 
@@ -325,7 +267,7 @@ namespace SRNet
 						OnPeerToPeerAccept(buf, size, remoteEP);
 						break;
 					case (byte)PacketType.PeerToPeerList:
-						OnPeerToPeerList(buf, size, remoteEP);
+						OnPeerToPeerList(buf, size);
 						break;
 					case (byte)PacketType.Ping:
 						OnPing(buf, size, remoteEP);
@@ -384,11 +326,8 @@ namespace SRNet
 
 			peer.Update(remoteEP, packet.SendSequence, packet.ReceiveSequence);
 
-			lock (m_Socket)
-			{
-				offset = new Pong(GetSendId(connectionId), peer).Pack(m_SendBuffer, peer.Encryptor);
-				m_Socket.Send(m_SendBuffer, 0, offset, peer.EndPoint);
-			}
+			offset = new Pong(GetSendId(connectionId), peer).Pack(m_SendBuffer, peer.Encryptor);
+			m_Socket.Send(m_SendBuffer, 0, offset, peer.EndPoint);
 			Log.Trace("OnPing {0}", connectionId);
 		}
 
@@ -409,6 +348,7 @@ namespace SRNet
 		{
 			int offset = 1;
 			connectionId = BinaryUtil.ReadInt(buf, ref offset);
+
 			if (!m_PeerManager.TryGetValue(connectionId, out PeerEntry peer)) return false;
 
 			if (!EncryptMessage.TryUnpack(buf, size, peer.Encryptor, out var packet)) return false;
@@ -424,6 +364,7 @@ namespace SRNet
 		{
 			int offset = 1;
 			connectionId = BinaryUtil.ReadInt(buf, ref offset);
+
 			if (!m_PeerManager.TryGetValue(connectionId, out PeerEntry peer)) return false;
 
 			if (!peer.EndPoint.Equals(remoteEP)) return false;
@@ -435,14 +376,12 @@ namespace SRNet
 			return true;
 		}
 
-		#region PeerToPeer
-
-		protected virtual void OnPeerToPeerRequest(byte[] buf, int size, IPEndPoint remoteEP)
+		void OnPeerToPeerRequest(byte[] buf, int size, IPEndPoint remoteEP)
 		{
 			if (PeerToPeerRequest.TryUnpack(m_CookieProvider, buf, size, out var packet))
 			{
 				Log.Debug("receive p2p request {0}", remoteEP);
-				m_P2PTaskManager.HandshakeAccept(packet, remoteEP);
+				P2PTask.HandshakeAccept(packet, remoteEP);
 			}
 			else
 			{
@@ -453,17 +392,17 @@ namespace SRNet
 		void OnPeerToPeerAccept(byte[] buf, int size, IPEndPoint remoteEP)
 		{
 			Log.Debug("receive p2p accept {0}", remoteEP);
-			m_P2PTaskManager.HandshakeComplete(buf, size, remoteEP);
+			P2PTask.HandshakeComplete(buf, size, remoteEP);
 		}
 
-		protected virtual void OnPeerToPeerHello(byte[] buf, int size, IPEndPoint remoteEP)
+		void OnPeerToPeerHello(byte[] buf, int size, IPEndPoint remoteEP)
 		{
 			if (!UseP2P) return;
 
 			if (PeerToPeerHello.TryUnpack(buf, size, out var packet))
 			{
 				Log.Debug("receive p2p hello {0}", remoteEP);
-				m_P2PTaskManager.OnPeerToPeerHello(packet, remoteEP);
+				P2PTask.OnPeerToPeerHello(packet, remoteEP);
 			}
 			else
 			{
@@ -471,41 +410,16 @@ namespace SRNet
 			}
 		}
 
-		protected virtual void OnPeerToPeerList(byte[] buf, int size, IPEndPoint remoteEP)
+		void OnPeerToPeerList(byte[] buf, int size)
 		{
 			if (IsHost || !UseP2P) return;
-			m_P2PTaskManager.OnPeerToPeerList(buf, size);
-		}
-
-		public void UpdateConnectPeerList(PeerInfo[] list, bool init)
-		{
-			Log.Debug("Update Connect PeerList {0}", list.Length);
-			m_P2PTaskManager.UpdateList(list, init);
-		}
-
-		public void AddConnectPeer(PeerInfo info)
-		{
-			Log.Debug("Add Connect Peer id{0}, {1}, {2}", info.ConnectionId, info.EndPont, info.LocalEndPont);
-			m_P2PTaskManager.Add(info);
-		}
-
-		public void CancelP2PHandshake(int connectionId)
-		{
-			m_P2PTaskManager.Remove(connectionId);
-		}
-
-		public Task WaitHandshake(CancellationToken token)
-		{
-			Log.Debug("Start WaitP2PConnectComplete");
-			return m_P2PTaskManager.WaitTaskComplete(token);
+			P2PTask.OnPeerToPeerList(buf, size);
 		}
 
 		public Task<StunResult> StunQuery(string host, int port, TimeSpan timeout)
 		{
 			return m_Socket.StunQuery(host, port, timeout);
 		}
-
-		#endregion
 
 	}
 
