@@ -1,4 +1,5 @@
 
+dotnet-format
 
 rm -rf ../unity/Assets/SRNet.Unity/Core/*.cs
 rm -rf ../unity/Assets/SRNet.Unity/Core/**/*.cs

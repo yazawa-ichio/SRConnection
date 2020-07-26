@@ -4,11 +4,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Threading;
 using System.Threading.Tasks;
+using DiscoveryPacket = SRNet.Packet.Discovery;
 
 namespace SRNet
 {
-
 	public class DiscoveryClient : IDisposable
 	{
 		class Entry
@@ -21,7 +22,7 @@ namespace SRNet
 		Dictionary<string, Entry> m_Room = new Dictionary<string, Entry>();
 		bool m_Run;
 		IPAddress m_Address;
-		Discovery m_DiscoveryPacket;
+		DiscoveryPacket m_DiscoveryPacket;
 		int m_DiscoveryPort;
 		Queue<TaskCompletionSource<DiscoveryRoom>> m_WaitNewRooms = new Queue<TaskCompletionSource<DiscoveryRoom>>();
 
@@ -41,7 +42,7 @@ namespace SRNet
 			{
 				throw new InvalidOperationException("すでに解放済みです");
 			}
-			m_DiscoveryPacket = new Discovery(new ArraySegment<byte>(System.Text.Encoding.UTF8.GetBytes(query)));
+			m_DiscoveryPacket = new DiscoveryPacket(new ArraySegment<byte>(System.Text.Encoding.UTF8.GetBytes(query)));
 			if (m_Run)
 			{
 				return;
@@ -122,14 +123,11 @@ namespace SRNet
 			}
 		}
 
-		public async Task<DiscoveryRoom[]> GetRoomsAsync(bool immediate = true)
+		public async Task<DiscoveryRoom[]> GetRoomsAsync(CancellationToken token = default)
 		{
-			if (!immediate)
-			{
-				var rooms = GetRooms();
-				if (rooms.Length > 0) return rooms;
-			}
-			await GetNewRoom();
+			var rooms = GetRooms();
+			if (rooms.Length > 0) return rooms;
+			await GetNewRoom(token);
 			return GetRooms();
 		}
 
@@ -148,21 +146,24 @@ namespace SRNet
 			return null;
 		}
 
-		public async Task<DiscoveryRoom> GetRoomAsync(string name)
+		public async Task<DiscoveryRoom> GetRoomAsync(string name, CancellationToken token = default)
 		{
 			while (m_Run)
 			{
 				var room = GetRoom(name);
 				if (room != null) return room;
-				await GetNewRoom();
+				await GetNewRoom(token);
 			}
 			throw new Exception("Stop DiscoveryClient");
 		}
 
-
-		async Task<DiscoveryRoom> GetNewRoom()
+		async Task<DiscoveryRoom> GetNewRoom(CancellationToken token = default)
 		{
 			var task = new TaskCompletionSource<DiscoveryRoom>(TaskCreationOptions.RunContinuationsAsynchronously);
+			if (default != token)
+			{
+				token.Register(() => task.TrySetCanceled(token));
+			}
 			lock (m_Room)
 			{
 				m_WaitNewRooms.Enqueue(task);

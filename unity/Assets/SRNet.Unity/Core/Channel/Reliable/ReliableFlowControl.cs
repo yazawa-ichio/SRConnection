@@ -31,18 +31,15 @@ namespace SRNet.Channel
 		{
 			foreach (var fragment in input)
 			{
-				lock (m_AckWaitList)
+				var data = new ReliableData(m_ChannelId, ++m_SendSequence, fragment);
+				if (m_AckWaitList.Count < m_Config.MaxWindowSize)
 				{
-					var data = new ReliableData(m_ChannelId, ++m_SendSequence, fragment);
-					if (m_AckWaitList.Count < m_Config.MaxWindowSize)
-					{
-						m_AckWaitList.Add(data);
-						Send(data);
-					}
-					else
-					{
-						m_SendWaitList.Enqueue(data);
-					}
+					m_AckWaitList.Add(data);
+					Send(data);
+				}
+				else
+				{
+					m_SendWaitList.Enqueue(data);
 				}
 			}
 		}
@@ -82,41 +79,35 @@ namespace SRNet.Channel
 
 		public void ReceiveAck(short receivedSequence)
 		{
-			lock (m_AckWaitList)
+			while (m_AckWaitList.Count > 0)
 			{
-				while (m_AckWaitList.Count > 0)
+				var packet = m_AckWaitList[0];
+				if (SeqUtil.IsGreater(packet.Sequence, receivedSequence))
 				{
-					var packet = m_AckWaitList[0];
-					if (SeqUtil.IsGreater(packet.Sequence, receivedSequence))
-					{
-						break;
-					}
-					packet.Dispose();
-					m_AckWaitList.RemoveAt(0);
+					break;
 				}
-				while (m_SendWaitList.Count > 0 && m_AckWaitList.Count < m_Config.MaxWindowSize)
-				{
-					var data = m_SendWaitList.Dequeue();
-					m_AckWaitList.Add(data);
-					Send(data);
-				}
+				packet.Dispose();
+				m_AckWaitList.RemoveAt(0);
+			}
+			while (m_SendWaitList.Count > 0 && m_AckWaitList.Count < m_Config.MaxWindowSize)
+			{
+				var data = m_SendWaitList.Dequeue();
+				m_AckWaitList.Add(data);
+				Send(data);
 			}
 		}
 
 		public void ReceiveAck(in ReliableAckData data)
 		{
-			lock (m_AckWaitList)
+			ReceiveAck(data.ReceivedSequence);
+			for (int i = 0; i < m_Config.MaxWindowSize && i < m_AckWaitList.Count; i++)
 			{
-				ReceiveAck(data.ReceivedSequence);
-				for (int i = 0; i < m_Config.MaxWindowSize && i < m_AckWaitList.Count; i++)
+				var packet = m_AckWaitList[i];
+				if (SeqUtil.IsGreaterEqual(packet.Sequence, data.NextReceivedSequence))
 				{
-					var packet = m_AckWaitList[i];
-					if (SeqUtil.IsGreaterEqual(packet.Sequence, data.NextReceivedSequence))
-					{
-						break;
-					}
-					Send(packet);
+					break;
 				}
+				Send(packet);
 			}
 		}
 
@@ -132,25 +123,19 @@ namespace SRNet.Channel
 
 		void Resend(int max)
 		{
-			lock (m_AckWaitList)
+			for (int i = 0; i < m_AckWaitList.Count && i < max; i++)
 			{
-				for (int i = 0; i < m_AckWaitList.Count && i < max; i++)
-				{
-					Send(m_AckWaitList[i]);
-				}
+				Send(m_AckWaitList[i]);
 			}
 		}
 
 		public void Dispose()
 		{
-			lock (m_AckWaitList)
+			foreach (var packet in m_AckWaitList)
 			{
-				foreach (var packet in m_AckWaitList)
-				{
-					packet.Dispose();
-				}
-				m_AckWaitList.Clear();
+				packet.Dispose();
 			}
+			m_AckWaitList.Clear();
 		}
 
 	}

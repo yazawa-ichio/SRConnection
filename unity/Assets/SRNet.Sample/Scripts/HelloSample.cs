@@ -11,6 +11,7 @@ namespace SRNet.Sample
 
 		Connection m_Server;
 		ClientConnection m_Client;
+		string m_ServerMessage;
 		bool m_Destroy;
 
 		void Awake()
@@ -35,7 +36,7 @@ namespace SRNet.Sample
 			{
 				var ep = new IPEndPoint(IPAddress.Loopback, Port);
 				var settings = ServerConnectSettings.FromXML(Resources.Load<TextAsset>("public").text, ep);
-				m_Client = await Connection.Connect(settings);
+				m_Client = await Connection.ConnectToServer(settings);
 				if (m_Destroy)
 				{
 					m_Client.Dispose();
@@ -49,16 +50,16 @@ namespace SRNet.Sample
 
 		void Update()
 		{
-			while (m_Server.TryReceive(out var message))
+			while (m_Server.TryReadMessage(out var message))
 			{
 				var text = Encoding.UTF8.GetString(message);
 				var buf = Encoding.UTF8.GetBytes("Hello " + text);
-				message.Peer.Send(buf);
+				message.ResponseTo(buf);
 			}
-			while (m_Client != null && m_Client.TryReceive(out var message))
+			while (m_Client != null && m_Client.TryReadMessage(out var message))
 			{
-				var text = Encoding.UTF8.GetString(message);
-				Debug.Log("From " + message.Peer.ConnectionId + " : " + text);
+				m_ServerMessage = Encoding.UTF8.GetString(message);
+				Debug.Log("From " + message.Peer.ConnectionId + " : " + m_ServerMessage);
 			}
 		}
 
@@ -85,6 +86,7 @@ namespace SRNet.Sample
 				m_Client.Server.Send(buf);
 			}
 
+			GUILayout.Label("From Server:" + m_ServerMessage);
 
 		}
 

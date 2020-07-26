@@ -21,20 +21,17 @@ namespace SRNet
 
 		public Encryptor Generate(in EncryptorKey key)
 		{
-			lock (m_HKDF)
-			{
-				int size = EncryptorKey.GetInputKey(in key, ref m_InputKey);
-				var ikm = new ArraySegment<byte>(m_InputKey, 0, size);
-				m_HKDF.DeriveKey(key.Cookie, ikm, s_Info, m_OutputKey);
+			int size = EncryptorKey.GetInputKey(in key, ref m_InputKey);
+			var ikm = new ArraySegment<byte>(m_InputKey, 0, size);
+			m_HKDF.DeriveKey(key.Cookie, ikm, s_Info, m_OutputKey);
 
-				byte[] aesKey = new byte[AesKeySize];
-				Buffer.BlockCopy(m_OutputKey, 0, aesKey, 0, AesKeySize);
+			byte[] aesKey = new byte[AesKeySize];
+			Buffer.BlockCopy(m_OutputKey, 0, aesKey, 0, AesKeySize);
 
-				byte[] hmacKey = new byte[HmacKeySize];
-				Buffer.BlockCopy(m_OutputKey, AesKeySize, hmacKey, 0, HmacKeySize);
+			byte[] hmacKey = new byte[HmacKeySize];
+			Buffer.BlockCopy(m_OutputKey, AesKeySize, hmacKey, 0, HmacKeySize);
 
-				return new Encryptor(aesKey, hmacKey);
-			}
+			return new Encryptor(aesKey, hmacKey);
 		}
 
 		public void Dispose()

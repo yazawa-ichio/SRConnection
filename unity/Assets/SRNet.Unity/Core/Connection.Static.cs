@@ -2,6 +2,7 @@ using SRNet.Packet;
 using SRNet.Stun;
 using System;
 using System.Net;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace SRNet
@@ -13,43 +14,80 @@ namespace SRNet
 			return new Connection(new ServerConnectionImpl(config));
 		}
 
-		public static Task<P2PHostConnection> StartLocalHost(string roomName)
+		public static P2PHostConnection StartLocalHost(string roomName)
 		{
 			return StartLocalHost(new LocalHostConfig { RoomName = roomName });
 		}
 
-		public static Task<P2PHostConnection> StartLocalHost(LocalHostConfig config)
+		public static P2PHostConnection StartLocalHost(LocalHostConfig config)
 		{
 			var impl = new P2PConnectionImpl(config);
-			return Task.FromResult(new P2PHostConnection(impl));
+			return new P2PHostConnection(impl);
 		}
 
-		public static async Task<ClientConnection> Connect(ServerConnectSettings settings)
+		public static Task<ClientConnection> ConnectToServer(ServerConnectSettings settings)
 		{
-			return new ClientConnection(await new ConnectToServerTask(settings).Run());
+			return ConnectToServer(settings, CancellationToken.None);
 		}
 
-		public static async Task<Connection> Connect(DiscoveryRoom room)
+		public static async Task<ClientConnection> ConnectToServer(ServerConnectSettings settings, CancellationToken token)
+		{
+			return new ClientConnection(await new ConnectToServerTask(settings, token).Run());
+		}
+
+		public static Task<Connection> ConnectToRoom(DiscoveryRoom room)
+		{
+			return ConnectToRoom(room, true, CancellationToken.None);
+		}
+
+		public static async Task<Connection> ConnectToRoom(DiscoveryRoom room, bool waitAllHandshake = true, CancellationToken token = default)
 		{
 			var remoteEP = new IPEndPoint(room.Address, room.Port);
 			if (!PeerToPeerRoomData.TryUnpack(room.Data, room.Data.Length, out var data))
 			{
 				throw new Exception("unpack room info");
 			}
-			var impl = await new ConnectToLocalOwnerTask(remoteEP, data, room.DiscoveryPort).Run();
-			return new Connection(impl);
+			var impl = await new ConnectToLocalOwnerTask(remoteEP, data, room.DiscoveryPort, token).Run();
+			return await TryWaitAllHandshake(new Connection(impl), waitAllHandshake, token);
 		}
 
-		public static async Task<Connection> P2PMatching(string url, string stunURL = null)
+		public static Task<Connection> P2PMatching(string url)
 		{
-			var impl = await new MatchingPeersTask(url, stunURL).Run();
-			return new Connection(impl);
+			return P2PMatching(url, null, CancellationToken.None, waitAllHandshake: true);
 		}
 
-		public static async Task<Connection> P2PMatching(Func<StunResult, Task<P2PSettings>> func, string stunURL = null)
+		public static async Task<Connection> P2PMatching(string url, string stunURL = null, CancellationToken token = default, bool waitAllHandshake = true)
 		{
-			var impl = await new MatchingPeersTask(func, stunURL).Run();
-			return new Connection(impl);
+			var impl = await new MatchingPeersTask(url, stunURL, token).Run();
+			return await TryWaitAllHandshake(new Connection(impl), waitAllHandshake, token);
+		}
+
+		public static Task<Connection> P2PMatching(Func<StunResult, CancellationToken, Task<P2PSettings>> func)
+		{
+			return P2PMatching(func, null, CancellationToken.None, waitAllHandshake: true);
+		}
+
+		public static async Task<Connection> P2PMatching(Func<StunResult, CancellationToken, Task<P2PSettings>> func, string stunURL = null, CancellationToken token = default, bool waitAllHandshake = true)
+		{
+			var impl = await new MatchingPeersTask(func, stunURL, token).Run();
+			return await TryWaitAllHandshake(new Connection(impl), waitAllHandshake, token);
+		}
+
+		static async Task<Connection> TryWaitAllHandshake(Connection conn, bool waitAllHandshake, CancellationToken token)
+		{
+			if (waitAllHandshake)
+			{
+				try
+				{
+					await conn.P2P.WaitHandshake(token);
+				}
+				catch (Exception)
+				{
+					conn.Dispose();
+					throw;
+				}
+			}
+			return conn;
 		}
 
 	}

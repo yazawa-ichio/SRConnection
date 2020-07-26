@@ -126,7 +126,7 @@ namespace SRNet.Sample
 			{
 				try
 				{
-					while (m_Connection.TryReceive(out var message))
+					while (m_Connection.TryReadMessage(out var message))
 					{
 						m_Receive = "From" + message.Peer.ConnectionId + "Receive:" + System.Text.Encoding.UTF8.GetString(message);
 					}
@@ -156,7 +156,7 @@ namespace SRNet.Sample
 
 				GUILayout.Label(m_Receive);
 
-				foreach (var peer in m_Connection.GetPeers())
+				foreach (var peer in m_Connection.Peers)
 				{
 					if (GUILayout.Button("Send:" + peer.ConnectionId))
 					{
@@ -166,7 +166,7 @@ namespace SRNet.Sample
 
 				if (GUILayout.Button("Broadcast"))
 				{
-					foreach (var peer in m_Connection.GetPeers())
+					foreach (var peer in m_Connection.Peers)
 					{
 						peer.Send(System.Text.Encoding.UTF8.GetBytes("Message" + System.DateTime.Now));
 					}

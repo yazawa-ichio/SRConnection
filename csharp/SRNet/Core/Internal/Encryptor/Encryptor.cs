@@ -16,6 +16,7 @@ namespace SRNet
 		readonly ICryptoTransform m_Decryptor;
 		readonly int m_BlockSize;
 		readonly int m_HashLength;
+		bool m_Disposed;
 
 		public byte[] AesKey => m_Aes.Key;
 
@@ -43,6 +44,8 @@ namespace SRNet
 
 		public void Encrypt(byte[] buf, int start, ref int totalSize)
 		{
+			if (m_Disposed) return;
+
 			var padSize = m_BlockSize - ((totalSize - start) % m_BlockSize);
 			for (int i = 0; i < padSize; i++)
 			{
@@ -58,6 +61,8 @@ namespace SRNet
 
 		public bool TryDecrypt(byte[] buf, int start, ref int totalSize)
 		{
+			if (m_Disposed) return false;
+
 			totalSize -= m_HashLength;
 
 			if (totalSize < 0) return false;
@@ -85,6 +90,7 @@ namespace SRNet
 
 		public void Dispose()
 		{
+			m_Disposed = true;
 			m_Encryptor.Dispose();
 			m_Decryptor.Dispose();
 			m_Aes.Dispose();

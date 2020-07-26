@@ -10,58 +10,52 @@ namespace SRNet
 
 		public int ConnectionId => m_Entry.ConnectionId;
 
-		PeerEntry m_Entry;
-		ConnectionImpl m_Connection;
-		ChannelContext m_Channel;
+		public TimeSpan HeartbeatTimeout { get => m_Entry.Timeout; set => m_Entry.Timeout = value; }
 
-		internal Peer(PeerEntry entry, ConnectionImpl connection, ChannelContext channel)
+		PeerEntry m_Entry;
+		Connection m_Connection;
+		ConnectionImpl m_Impl;
+
+		internal Peer(PeerEntry entry, Connection connection, ConnectionImpl impl)
 		{
 			m_Entry = entry;
 			m_Connection = connection;
-			m_Channel = channel;
+			m_Impl = impl;
+		}
+
+		public void Send(byte[] buf, bool reliable = true)
+		{
+			Send(buf, 0, buf.Length, reliable);
 		}
 
 		public void Send(byte[] buf, int offset, int size, bool reliable = true)
 		{
 			short channel = reliable ? DefaultChannel.Reliable : DefaultChannel.Unreliable;
-			m_Channel.Send(channel, m_Entry.ConnectionId, buf, offset, size);
-		}
-
-		public void Send(byte[] buf, bool reliable = true)
-		{
-			short channel = reliable ? DefaultChannel.Reliable : DefaultChannel.Unreliable;
-			m_Channel.Send(channel, m_Entry.ConnectionId, buf, 0, buf.Length);
+			m_Connection.ChannelSend(channel, m_Entry.ConnectionId, buf, offset, size);
 		}
 
 		public void Send<T>(Action<Stream, T> write, in T obj, bool reliable = true)
 		{
 			short channel = reliable ? DefaultChannel.Reliable : DefaultChannel.Unreliable;
-			m_Channel.Send(channel, m_Entry.ConnectionId, write, obj);
+			m_Connection.ChannelSend(channel, m_Entry.ConnectionId, write, obj);
 		}
 
-		public void Send(short channel, byte[] buf, int offset, int size)
+		public PeerChannelAccessor Channel(short channel) => new PeerChannelAccessor(channel, m_Entry.ConnectionId, m_Connection);
+
+		public bool Ping()
 		{
-			m_Channel.Send(channel, m_Entry.ConnectionId, buf, offset, size);
+			lock (m_Impl)
+			{
+				return m_Impl.SendPing(m_Entry.ConnectionId);
+			}
 		}
 
-		public void Send(short channel, byte[] buf)
+		public bool Disconnect()
 		{
-			m_Channel.Send(channel, m_Entry.ConnectionId, buf, 0, buf.Length);
-		}
-
-		public void Send<T>(short channel, Action<Stream, T> write, in T obj)
-		{
-			m_Channel.Send(channel, m_Entry.ConnectionId, write, obj);
-		}
-
-		public bool SendPing()
-		{
-			return m_Connection.SendPing(m_Entry.ConnectionId);
-		}
-
-		public bool SendDisconnect()
-		{
-			return m_Connection.SendDisconnect(m_Entry.ConnectionId);
+			lock (m_Impl)
+			{
+				return m_Impl.SendDisconnect(m_Entry.ConnectionId);
+			}
 		}
 
 		public bool Equals(Peer other)

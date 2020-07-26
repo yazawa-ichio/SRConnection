@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Net;
 using System.Security.Cryptography;
 using System.Threading;
@@ -19,6 +20,8 @@ namespace SRNet.Tests
 
 		public Connection Conn => m_Connection;
 
+		public ConcurrentQueue<PeerEvent> PeerEvents { get; private set; } = new ConcurrentQueue<PeerEvent>();
+
 		public EchoServer() : this(DefaultEndPoint, RSA.Create()) { }
 
 		public EchoServer(IPEndPoint localEP, RSA rsa)
@@ -29,12 +32,14 @@ namespace SRNet.Tests
 			config.LocalEP = localEP;
 			config.RSA = rsa;
 			m_Connection = Connection.StartServer(config);
+			m_Connection.OnPeerEvent += PeerEvents.Enqueue;
 			Start();
 		}
 
 		public EchoServer(Connection connection)
 		{
 			m_Connection = connection;
+			m_Connection.OnPeerEvent += PeerEvents.Enqueue;
 			Start();
 		}
 
@@ -70,10 +75,10 @@ namespace SRNet.Tests
 			{
 				try
 				{
-					if (m_Connection.TryPollReceive(out var message, TimeSpan.FromSeconds(1)))
+					if (m_Connection.PollTryReadMessage(out var message, TimeSpan.FromSeconds(1)))
 					{
 						Console.WriteLine(System.Text.Encoding.UTF8.GetString(message));
-						message.Peer.Send(message.Channel, message);
+						message.ResponseTo(message);
 					}
 				}
 				catch (Exception ex)

@@ -12,6 +12,8 @@ namespace SRNet.Channel
 
 		ReliableChannelConfig m_Config;
 
+		IConfig IChannel.Config => m_Config;
+
 		public ReliableChannel(ReliableChannelConfig config)
 		{
 			m_Config = config;
@@ -23,18 +25,15 @@ namespace SRNet.Channel
 			m_Context = ctx;
 		}
 
-		ReliableFlowControl GetOrAdd(int id)
+		ReliableFlowControl Get(int id)
 		{
-			if (!m_FlowControls.TryGetValue(id, out var value))
-			{
-				m_FlowControls[id] = value = new ReliableFlowControl(m_ChannelId, id, m_Context, m_Config);
-			}
+			m_FlowControls.TryGetValue(id, out var value);
 			return value;
 		}
 
 		public void Send(int id, List<Fragment> input)
 		{
-			GetOrAdd(id).Send(input);
+			Get(id)?.Send(input);
 		}
 
 		public bool TryRead(int id, List<Fragment> output)
@@ -51,14 +50,20 @@ namespace SRNet.Channel
 			var tmpOffset = offset;
 			if (ReliableAckData.TryUnpack(buf, ref offset, out var ack))
 			{
-				GetOrAdd(id).ReceiveAck(ack);
+				Get(id)?.ReceiveAck(ack);
 
 			}
 			offset = tmpOffset;
 			if (ReliableData.TryUnpack(buf, ref offset, out var data))
 			{
-				GetOrAdd(id).Enqueue(data);
+				Get(id)?.Enqueue(data);
 			}
+		}
+
+		public void AddPeer(int id)
+		{
+			RemovePeer(id);
+			m_FlowControls[id] = new ReliableFlowControl(m_ChannelId, id, m_Context, m_Config);
 		}
 
 		public void RemovePeer(int id)
@@ -86,7 +91,6 @@ namespace SRNet.Channel
 			}
 			m_FlowControls = null;
 		}
-
 
 	}
 }

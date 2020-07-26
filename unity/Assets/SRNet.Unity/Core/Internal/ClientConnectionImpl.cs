@@ -1,22 +1,17 @@
-﻿using System.Net;
-
-namespace SRNet
+﻿namespace SRNet
 {
 
 	internal class ClientConnectionImpl : ConnectionImpl
 	{
-		bool m_AllowP2P;
+		bool m_UseP2P;
+		public override bool UseP2P => m_UseP2P;
 
-		public bool AllowP2P { set => m_AllowP2P = true; get => m_AllowP2P; }
-
-		protected override bool UseP2P => m_AllowP2P;
-
-		internal ClientConnectionImpl(int id, UdpSocket socket, IPEndPoint remoteEP, Encryptor encryptor, EncryptorGenerator encryptorGenerator) : base(socket, encryptorGenerator)
+		internal ClientConnectionImpl(int id, UdpSocket socket, ServerConnectSettings settings, Encryptor encryptor, EncryptorGenerator encryptorGenerator) : base(socket, encryptorGenerator)
 		{
 			SelfId = id;
-			m_PeerManager.Add(new PeerEntry(id, 0, encryptor, remoteEP));
+			m_UseP2P = settings.UseP2P;
+			m_PeerManager.Add(new PeerEntry(id, 0, encryptor, settings.EndPoint));
 		}
-
 
 		protected override void Dispose(bool disposing)
 		{
@@ -27,7 +22,7 @@ namespace SRNet
 		internal protected override void OnRemove(PeerEntry peer)
 		{
 			base.OnRemove(peer);
-			if (peer.ConnectionId == SelfId)
+			if (DisposeOnDisconnectOwner && peer.ConnectionId == SelfId)
 			{
 				Dispose();
 			}

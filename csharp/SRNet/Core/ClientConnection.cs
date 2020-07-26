@@ -2,27 +2,24 @@
 {
 	public class ClientConnection : Connection
 	{
-		ClientConnectionImpl m_ClientImpl;
-
 		public Peer Server { get; private set; }
 
-		public bool AllowP2P { get => m_ClientImpl.AllowP2P; set => m_ClientImpl.AllowP2P = value; }
+		public bool CanP2P => P2P != null;
 
 		internal ClientConnection(ClientConnectionImpl impl) : base(impl)
 		{
-			m_ClientImpl = impl;
 			Server = GetPeer(SelfId);
 		}
 
 		public void SendDisconnect()
 		{
-			Server.SendDisconnect();
+			Server.Disconnect();
 			Dispose();
 		}
 
 		public void SendPing()
 		{
-			Server.SendPing();
+			Server.Ping();
 		}
 
 	}
