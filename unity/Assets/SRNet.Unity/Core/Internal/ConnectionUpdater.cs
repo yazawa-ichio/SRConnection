@@ -50,6 +50,8 @@ namespace SRNet
 
 		public void TryUpdate(bool force)
 		{
+			if (m_Disposed) return;
+
 			if (force)
 			{
 				m_Connection.UpdateStatus();
@@ -97,9 +99,7 @@ namespace SRNet
 			catch (Exception ex)
 			{
 				Log.Exception(ex);
-				m_Timer?.Dispose();
-				m_Timer = null;
-				m_Connection.Dispose();
+				Dispose();
 			}
 			finally
 			{
