@@ -1,7 +1,7 @@
 
 dotnet-format
 
-rm -rf ../unity/Assets/SRNet.Unity/Core/*.cs
-rm -rf ../unity/Assets/SRNet.Unity/Core/**/*.cs
-rm -rf ../unity/Assets/SRNet.Unity/Core/**/**/*.cs
-cp -r ./SRNet/Core ../unity/Assets/SRNet.Unity
+rm -rf ../unity/Assets/SRConnection.Unity/Core/*.cs
+rm -rf ../unity/Assets/SRConnection.Unity/Core/**/*.cs
+rm -rf ../unity/Assets/SRConnection.Unity/Core/**/**/*.cs
+cp -r ./SRConnection/Core ../unity/Assets/SRConnection.Unity

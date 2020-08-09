@@ -1,4 +1,4 @@
-﻿# SRNet
+﻿# SRConnection
 安全なハンドシェイクと平文・暗号をそれぞれ送れる通信ライブラリです。  
 Unityで利用する事を前提にしています。  
 Unityの新しいtransportパッケージの中身を見る前に作り始めましたが、そちらが思いのほか良さそうなので、このライブラリをこれ以上拡張するかは分かりません。  
@@ -18,7 +18,7 @@ unityのサンプル実装に簡単な実装例があります。
 upmでインストールできます。  
 manifest.jsonに以下のパッケージを追加してください。  
 
-`"jp.yazawa-ichio.srnet.unity": "https://github.com/yazawa-ichio/SRNet.git?path=unity/Assets/SRNet.Unity"`
+`"jp.yazawa-ichio.srconnection.unity": "https://github.com/yazawa-ichio/SRConnection.git?path=unity/Assets/SRConnection.Unity"`
 
 
 ### 暗号部分の問題点について

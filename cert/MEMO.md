@@ -6,7 +6,7 @@ openssl rsa -in private.key -out private.key
 openssl rsa -in private.key -pubout -out public.pem
 ```
 
-もしくはSRNet.Toolsにて
+もしくはSRConnection.Toolsにて
 ```
 #鍵生成
 dotnet run key-generate
