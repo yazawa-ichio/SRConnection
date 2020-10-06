@@ -29,10 +29,14 @@ namespace SRConnection.Tests
 		[TestMethod, Timeout(10000)]
 		public async Task エコーサーバーテスト()
 		{
+			Peer serverPeer;
 			using (var server = new EchoServer())
 			using (var conn1 = await Connection.ConnectToServer(server.GetConnectSettings()))
 			using (var conn2 = await Connection.ConnectToServer(server.GetConnectSettings()))
 			{
+				serverPeer = conn1.Server;
+				Assert.IsTrue(conn1.Server.IsConnection);
+				Assert.IsTrue(conn2.Server.IsConnection);
 				for (int i = 0; i < 100; i++)
 				{
 					var text = "Text:" + (i + 1);
@@ -45,6 +49,7 @@ namespace SRConnection.Tests
 					Assert.AreEqual(text, To(message));
 				}
 			}
+			Assert.IsFalse(serverPeer.IsConnection);
 		}
 
 		[TestMethod, Timeout(50000)]
@@ -95,6 +100,7 @@ namespace SRConnection.Tests
 				Assert.IsTrue(server.PeerEvents.TryDequeue(out var e));
 				Assert.AreEqual(e.EventType, PeerEvent.Type.Add);
 				Assert.AreEqual(e.Peer.ConnectionId, conn.SelfId);
+				Assert.IsTrue(e.Peer.IsConnection);
 				conn.Dispose();
 				while (true)
 				{
@@ -104,6 +110,7 @@ namespace SRConnection.Tests
 						Assert.IsTrue(server.PeerEvents.TryDequeue(out e));
 						Assert.AreEqual(e.EventType, PeerEvent.Type.Remove);
 						Assert.AreEqual(e.Peer.ConnectionId, conn.SelfId);
+						Assert.IsFalse(e.Peer.IsConnection);
 						break;
 					}
 				}
@@ -245,6 +252,33 @@ namespace SRConnection.Tests
 
 
 					}
+
+					{
+						var peer1ByHost = host.GetPeer(conn1.SelfId);
+						var peer2ByHost = host.GetPeer(conn2.SelfId);
+						var peer1 = conn2.GetPeer(conn1.SelfId);
+						var peer2 = conn1.GetPeer(conn2.SelfId);
+						Assert.IsTrue(peer1ByHost.IsConnection);
+						Assert.IsTrue(peer2ByHost.IsConnection);
+						Assert.IsTrue(peer1.IsConnection);
+						Assert.IsTrue(peer2.IsConnection);
+
+						conn1.BroadcastDisconnect();
+						await Task.Delay(100);
+
+						conn2.TryReadMessage(out _);
+
+						Assert.IsTrue(peer2ByHost.IsConnection);
+						Assert.IsFalse(peer1ByHost.IsConnection);
+						Assert.IsFalse(peer1.IsConnection);
+						Assert.IsFalse(peer2.IsConnection);
+
+						conn2.BroadcastDisconnect();
+						await Task.Delay(100);
+
+						Assert.IsFalse(peer2ByHost.IsConnection);
+					}
+
 				}
 
 			}

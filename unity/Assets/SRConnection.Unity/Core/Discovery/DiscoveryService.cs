@@ -7,7 +7,7 @@ namespace SRConnection
 {
 	public class DiscoveryService : IDisposable
 	{
-		public const int Port = 54731;
+		public const int Port = 51732;
 
 		UdpSocket m_Socket = new UdpSocket();
 		bool m_Bind;

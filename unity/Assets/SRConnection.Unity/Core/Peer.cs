@@ -6,7 +6,7 @@ namespace SRConnection
 {
 	public class Peer : IEquatable<Peer>
 	{
-		public bool IsConnection => m_Entry.Disposed && !m_Connection.Disposed;
+		public bool IsConnection => !m_Entry.Disposed && !m_Connection.Disposed;
 
 		public int ConnectionId => m_Entry.ConnectionId;
 
