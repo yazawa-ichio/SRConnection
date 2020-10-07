@@ -204,7 +204,7 @@ namespace SRConnection.Tests
 			}
 		}
 
-		[TestMethod, Timeout(10000)]
+		[TestMethod, Timeout(3000)]
 		public async Task ローカルP2Pテスト()
 		{
 			using (var host = Connection.StartLocalHost("TestRoom"))
@@ -219,6 +219,11 @@ namespace SRConnection.Tests
 				using (var conn1 = await Connection.ConnectToRoom(room))
 				using (var conn2 = await Connection.ConnectToRoom(room))
 				{
+					host.Channel.Bind<Channel.ReliableChannelConfig>(101);
+					conn1.Channel.Bind<Channel.ReliableChannelConfig>(101);
+					conn2.Channel.Bind<Channel.ReliableChannelConfig>(101);
+
+
 					for (int i = 0; i < 100; i++)
 					{
 						var text = "Text:" + (i + 1);
@@ -250,6 +255,14 @@ namespace SRConnection.Tests
 						Assert.AreEqual(text, To(message));
 						Assert.AreEqual(host.SelfId, message.Peer.ConnectionId);
 
+						conn1.Channel[101].Target(host.SelfId).Send(To(text));
+						conn2.Channel[101].Target(host.SelfId).Send(To(text));
+						while (!conn1.PollTryReadMessage(out message, TimeSpan.FromSeconds(1))) ;
+						Assert.AreEqual(text, To(message));
+						Assert.AreEqual(host.SelfId, message.Peer.ConnectionId);
+						while (!conn2.PollTryReadMessage(out message, TimeSpan.FromSeconds(1))) ;
+						Assert.AreEqual(text, To(message));
+						Assert.AreEqual(host.SelfId, message.Peer.ConnectionId);
 
 					}
 
