@@ -335,5 +335,28 @@ namespace SRConnection.Tests
 			}
 		}
 
+		[TestMethod, Timeout(2000)]
+		public void 到達保証ありエラー機能テスト()
+		{
+			var ctx = new TestChannelContext();
+			using (var control = new ReliableFlowControl(1, 1, ctx))
+			{
+				var buf = GetRandam(1000);
+				short id = 1;
+				var fragments = GetFragments(buf, id++, Fragment.Size);
+				control.Send(fragments);
+				control.Update(TimeSpan.FromSeconds(1));
+				try
+				{
+					control.Update(TimeSpan.FromSeconds(10));
+					Assert.IsTrue(false, "Ackのタイムアウトで切断される");
+				}
+				catch (Exception ex)
+				{
+					Assert.AreEqual(ReliableFlowControl.AckTimeoutError, ex.Message);
+				}
+			}
+		}
+
 	}
 }

@@ -6,6 +6,8 @@ namespace SRConnection.Channel
 
 	public class ReliableFlowControl : IDisposable
 	{
+		public static readonly string AckTimeoutError = "Ack Timeout";
+
 		short m_ChannelId;
 		int m_ConnectionId;
 		IChannelContext m_Context;
@@ -127,7 +129,7 @@ namespace SRConnection.Channel
 				m_TimeoutTimer -= delta;
 				if (m_TimeoutTimer < TimeSpan.Zero)
 				{
-					m_Context.DisconnectError(m_ChannelId, m_ConnectionId, "Ack Timeout");
+					m_Context.DisconnectError(m_ChannelId, m_ConnectionId, AckTimeoutError);
 				}
 			}
 		}

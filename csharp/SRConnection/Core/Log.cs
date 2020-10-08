@@ -179,6 +179,13 @@ namespace SRConnection
 		}
 
 		[Conditional(ENABLED_ALL), Conditional(ENABLED_DEBUG_OR_HIGHER), Conditional(ENABLED_WARNING_OR_HIGHER)]
+		internal static void Error<T1, T2, T3>(string message, T1 arg0, T2 arg1, T3 arg2)
+		{
+			if (!s_Enabled || s_Level < LogLevel.Error) return;
+			s_Logger?.Error(string.Format(message, arg0, arg1, arg2));
+		}
+
+		[Conditional(ENABLED_ALL), Conditional(ENABLED_DEBUG_OR_HIGHER), Conditional(ENABLED_WARNING_OR_HIGHER)]
 		internal static void Exception(System.Exception ex)
 		{
 			if (s_Logger == null) return;

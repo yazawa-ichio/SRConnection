@@ -18,6 +18,7 @@
 
 		public void DisconnectError(short channelId, int connectionId, string reason)
 		{
+			Log.Error("DisconnectError:{0}, channel {1}, id {2}", reason, channelId, connectionId);
 			//TODO:Reasonをアプリレイヤーに引き渡す
 			m_Impl.SendDisconnect(connectionId);
 		}
