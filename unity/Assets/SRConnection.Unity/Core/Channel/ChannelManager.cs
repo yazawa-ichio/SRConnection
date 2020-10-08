@@ -35,6 +35,10 @@ namespace SRConnection.Channel
 			var channel = config.Create();
 			channel.Init(id, m_Context);
 			m_Channels.TryAdd(id, channel);
+			foreach (var peer in m_Peers)
+			{
+				channel.AddPeer(peer);
+			}
 		}
 
 		public void Unbind(short id)

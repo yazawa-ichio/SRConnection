@@ -91,7 +91,7 @@ namespace SRConnection
 		{
 			lock (m_Impl)
 			{
-				var channel = reliable ? DefaultChannel.Unreliable : DefaultChannel.Unreliable;
+				var channel = reliable ? DefaultChannel.Reliable : DefaultChannel.Unreliable;
 				m_Channel.Send(channel, connectionId, buf, offset, size);
 			}
 		}
