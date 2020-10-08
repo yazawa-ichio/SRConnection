@@ -67,7 +67,7 @@ namespace SRConnection.Tests
 				service.Start(nameMatch: true);
 
 				client.Start("UnMatchName");
-				await Task.Delay(2000);
+				await Task.Delay(500);
 				Assert.AreEqual(0, client.GetRooms().Length, "名前一致ではないので部屋が見つからない");
 				client.Start("NameMatchingTest");
 				var room = await client.GetRoomAsync("NameMatchingTest");
@@ -80,7 +80,7 @@ namespace SRConnection.Tests
 				service.Start(x => x == "Match");
 
 				client.Start("UnMatch");
-				await Task.Delay(2000);
+				await Task.Delay(500);
 				Assert.AreEqual(0, client.GetRooms().Length, "不正なクエリなので部屋が見つからない");
 				client.Start("Match");
 				var room = await client.GetRoomAsync("CustomMatchingTest");
@@ -93,7 +93,7 @@ namespace SRConnection.Tests
 		{
 			await Assert.ThrowsExceptionAsync<TaskCanceledException>(() =>
 			{
-				return DiscoveryUtil.GetRoom("TestRoom", 1000);
+				return DiscoveryUtil.GetRoom("TestRoom", 500);
 			}, "タイムアウトがあるのでキャンセルされる");
 		}
 

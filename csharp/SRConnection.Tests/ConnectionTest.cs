@@ -58,7 +58,7 @@ namespace SRConnection.Tests
 			using (var server = new EchoServer())
 			{
 				List<Task> tasks = new List<Task>();
-				for (int i = 0; i < 1000; i++)
+				for (int i = 0; i < 100; i++)
 				{
 					tasks.Add(RandamServerRequest(server.GetConnectSettings()));
 				}
@@ -204,7 +204,7 @@ namespace SRConnection.Tests
 			}
 		}
 
-		[TestMethod, Timeout(10000)]
+		[TestMethod, Timeout(3000)]
 		public async Task ローカルP2Pテスト()
 		{
 			using (var host = Connection.StartLocalHost("TestRoom"))
@@ -219,6 +219,11 @@ namespace SRConnection.Tests
 				using (var conn1 = await Connection.ConnectToRoom(room))
 				using (var conn2 = await Connection.ConnectToRoom(room))
 				{
+					host.Channel.Bind<Channel.ReliableChannelConfig>(101);
+					conn1.Channel.Bind<Channel.ReliableChannelConfig>(101);
+					conn2.Channel.Bind<Channel.ReliableChannelConfig>(101);
+
+
 					for (int i = 0; i < 100; i++)
 					{
 						var text = "Text:" + (i + 1);
@@ -250,6 +255,14 @@ namespace SRConnection.Tests
 						Assert.AreEqual(text, To(message));
 						Assert.AreEqual(host.SelfId, message.Peer.ConnectionId);
 
+						conn1.Channel[101].Target(host.SelfId).Send(To(text));
+						conn2.Channel[101].Target(host.SelfId).Send(To(text));
+						while (!conn1.PollTryReadMessage(out message, TimeSpan.FromSeconds(1))) ;
+						Assert.AreEqual(text, To(message));
+						Assert.AreEqual(host.SelfId, message.Peer.ConnectionId);
+						while (!conn2.PollTryReadMessage(out message, TimeSpan.FromSeconds(1))) ;
+						Assert.AreEqual(text, To(message));
+						Assert.AreEqual(host.SelfId, message.Peer.ConnectionId);
 
 					}
 
@@ -264,7 +277,7 @@ namespace SRConnection.Tests
 						Assert.IsTrue(peer2.IsConnection);
 
 						conn1.BroadcastDisconnect();
-						await Task.Delay(100);
+						await Task.Delay(20);
 
 						conn2.TryReadMessage(out _);
 
@@ -274,7 +287,7 @@ namespace SRConnection.Tests
 						Assert.IsFalse(peer2.IsConnection);
 
 						conn2.BroadcastDisconnect();
-						await Task.Delay(100);
+						await Task.Delay(20);
 
 						Assert.IsFalse(peer2ByHost.IsConnection);
 					}
@@ -377,7 +390,7 @@ namespace SRConnection.Tests
 				bool success = false;
 				for (int i = 0; i < 10; i++)
 				{
-					await Task.Delay(100);
+					await Task.Delay(10);
 					conn.Reliable.Broadcast(System.Text.Encoding.UTF8.GetBytes("Message" + DateTime.Now));
 					while (conn.TryReadMessage(out var _))
 					{

@@ -1,5 +1,6 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SRConnection.Channel;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -202,6 +203,38 @@ namespace SRConnection.Tests
 			}
 		}
 
+		[TestMethod]
+		public void 到達保証なしチャンネルオーダー受信テスト()
+		{
+			for (int i = 0; i < 100; i++)
+			{
+				var ctx = new TestChannelContext();
+				var config = new UnreliableChannelConfig
+				{
+					Ordered = true,
+				};
+				using (var control = new UnreliableFlowControl(1, 1, ctx, config))
+				{
+					List<byte[]> buf = new List<byte[]>();
+					short id = 1;
+					for (int j = 0; j < 200; j++)
+					{
+						buf.Add(GetRandam(Fragment.Size - 100 + j));
+						control.Send(GetFragments(buf[j], id++, Fragment.Size));
+					}
+					ctx.ShuffleSentQueue();
+					int prev = -1;
+					while (ctx.Receive(control, out var output))
+					{
+						var ret = output.ToBytes();
+						Assert.IsTrue(prev < ret.Length);
+						prev = ret.Length;
+						output.RemoveRef(true);
+					}
+				}
+			}
+		}
+
 		[TestMethod, Timeout(2000)]
 		public void 到達保証ありチャンネル機能テスト()
 		{
@@ -227,26 +260,101 @@ namespace SRConnection.Tests
 		[TestMethod, Timeout(2000)]
 		public void 到達保証ありチャンネルパケロステスト()
 		{
+			foreach (var ordered in new bool[] { true, false })
+			{
+				var ctx = new TestChannelContext();
+				var config = new ReliableChannelConfig
+				{
+					Ordered = ordered
+				};
+				using (var control = new ReliableFlowControl(1, 1, ctx, config))
+				{
+					List<byte[]> buf = new List<byte[]>();
+					short id = 1;
+					for (int i = 0; i < 10; i++)
+					{
+						buf.Add(GetRandam(200 + i * 100));
+						control.Send(GetFragments(buf[buf.Count - 1], id++, Fragment.Size));
+					}
+					for (int i = 0; i < 50; i++)
+					{
+						buf.Add(GetRandam(2000 + (int)(10000 * m_Random.NextDouble())));
+						control.Send(GetFragments(buf[buf.Count - 1], id++, Fragment.Size));
+					}
+					ctx.ShuffleSentQueue();
+					int count = 0;
+					while (count < buf.Count && ctx.Receive(control, out var output, 0.3))
+					{
+						ctx.ShuffleSentQueue();
+						var ret = output.ToBytes();
+						if (ordered)
+						{
+							Assert.IsTrue(Equals(buf[count++], ret), "順番に届く");
+						}
+						else
+						{
+							count++;
+						}
+						output.RemoveRef(true);
+					}
+					Assert.AreEqual(buf.Count, count, "同じ数読み取れている");
+				}
+			}
+		}
+
+		[TestMethod]
+		public void 到達保証あり逆順受信テスト()
+		{
+
 			var ctx = new TestChannelContext();
-			using (var control = new ReliableFlowControl(1, 1, ctx))
+			var config = new ReliableChannelConfig
+			{
+				Timeout = TimeSpan.FromSeconds(60),
+				MaxWindowSize = 1000,
+				Ordered = false
+			};
+			using (var control = new ReliableFlowControl(1, 1, ctx, config))
 			{
 				List<byte[]> buf = new List<byte[]>();
 				short id = 1;
-				for (int i = 0; i < 50; i++)
+				for (int i = 0; i < 100; i++)
 				{
-					buf.Add(GetRandam(2000 + (int)(10000 * m_Random.NextDouble())));
-					control.Send(GetFragments(buf[i], id++, Fragment.Size));
+					buf.Add(GetRandam(200 + i * 100));
+					control.Send(GetFragments(buf[buf.Count - 1], id++, Fragment.Size));
 				}
-				ctx.ShuffleSentQueue();
+				buf.Reverse();
+				ctx.Reverse();
 				int count = 0;
-				while (count < buf.Count && ctx.Receive(control, out var output, 0.3))
+				while (count < buf.Count && ctx.Receive(control, out var output))
 				{
-					ctx.ShuffleSentQueue();
 					var ret = output.ToBytes();
-					Assert.IsTrue(Equals(buf[count++], ret), "順番に届く");
+					Assert.IsTrue(Equals(buf[count++], ret), "逆順に届く");
 					output.RemoveRef(true);
 				}
 				Assert.AreEqual(buf.Count, count, "同じ数読み取れている");
+			}
+		}
+
+		[TestMethod, Timeout(2000)]
+		public void 到達保証ありエラー機能テスト()
+		{
+			var ctx = new TestChannelContext();
+			using (var control = new ReliableFlowControl(1, 1, ctx))
+			{
+				var buf = GetRandam(1000);
+				short id = 1;
+				var fragments = GetFragments(buf, id++, Fragment.Size);
+				control.Send(fragments);
+				control.Update(TimeSpan.FromSeconds(1));
+				try
+				{
+					control.Update(TimeSpan.FromSeconds(10));
+					Assert.IsTrue(false, "Ackのタイムアウトで切断される");
+				}
+				catch (Exception ex)
+				{
+					Assert.AreEqual(ReliableFlowControl.AckTimeoutError, ex.Message);
+				}
 			}
 		}
 

@@ -56,7 +56,7 @@ namespace SRConnection.Tests
 		HMAC m_Hmac;
 		byte[] m_HmacInput = new byte[4 * 4];
 		int m_MaxMember = 4;
-		TimeSpan m_Timeout = TimeSpan.FromSeconds(3);
+		TimeSpan m_Timeout = TimeSpan.FromSeconds(1);
 		CancellationTokenSource m_Cancellation = new CancellationTokenSource();
 		HttpListener m_Listener = new HttpListener();
 
