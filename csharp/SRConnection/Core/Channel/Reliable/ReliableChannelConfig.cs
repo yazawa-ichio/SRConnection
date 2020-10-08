@@ -8,6 +8,8 @@ namespace SRConnection.Channel
 
 		public bool Encrypt = true;
 
+		public bool Ordered = true;
+
 		public TimeSpan Timeout = TimeSpan.FromSeconds(10);
 
 		public IChannel Create()

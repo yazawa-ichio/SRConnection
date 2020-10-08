@@ -6,6 +6,8 @@
 
 		public bool Encrypt = true;
 
+		public bool Ordered = false;
+
 		public IChannel Create()
 		{
 			return new UnreliableChannel(this);

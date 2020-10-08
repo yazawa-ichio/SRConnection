@@ -25,7 +25,7 @@ namespace SRConnection.Channel
 			m_ConnectionId = connectionId;
 			m_Context = ctx;
 			m_Config = config ?? new ReliableChannelConfig();
-			m_ReceiveQueue = new ReliableFragmentQueue();
+			m_ReceiveQueue = new ReliableFragmentQueue(m_Config);
 			m_TimeoutTimer = m_Config.Timeout;
 		}
 

@@ -9,7 +9,7 @@ namespace SRConnection.Channel
 		Dictionary<short, int> m_Count = new Dictionary<short, int>();
 		HashSet<short> m_DequeueList = new HashSet<short>();
 		Queue<short> m_RemoveBuffer = new Queue<short>();
-		short m_RemoveSequence = -1;
+		short m_LastDequeueSequence = -1;
 		bool m_Disposed;
 		UnreliableChannelConfig m_Config;
 
@@ -25,7 +25,7 @@ namespace SRConnection.Channel
 				data.Dispose();
 				return;
 			}
-			if (SeqUtil.IsGreaterEqual(m_RemoveSequence, data.Sequence))
+			if (m_Config.Ordered && SeqUtil.IsGreaterEqual(m_LastDequeueSequence, data.Sequence))
 			{
 				data.Dispose();
 				return;
@@ -40,7 +40,7 @@ namespace SRConnection.Channel
 			UpdateCount(payload);
 			while (m_Config.MaxBufferSize <= m_Buffer.Count && m_Count.Count > 1)
 			{
-				if (!TryRemoveSequence())
+				if (!TryRemoveBuffer())
 				{
 					break;
 				}
@@ -48,13 +48,15 @@ namespace SRConnection.Channel
 
 		}
 
-		bool TryRemoveSequence()
+		bool TryRemoveBuffer()
 		{
+			// 次に取り出されるのでバッファーの縮小は無視する
 			var fragment = m_Buffer.Values[0];
 			if (m_DequeueList.Contains(fragment.Id))
 			{
 				return false;
 			}
+			// 同一IDの物は削除
 			foreach (var kvp in m_Buffer)
 			{
 				if (fragment.Id != kvp.Value.Id)
@@ -100,7 +102,14 @@ namespace SRConnection.Channel
 
 		public bool TryDequeue(List<Fragment> output)
 		{
-			if (m_Disposed || m_DequeueList.Count == 0) return false;
+			if (m_Disposed) return false;
+
+			if (m_Config.Ordered)
+			{
+				TryRemoveLessThanLastDequeueSequence();
+			}
+
+			if (m_DequeueList.Count == 0) return false;
 
 			short start = 0;
 			int len = 0;
@@ -114,6 +123,10 @@ namespace SRConnection.Channel
 					break;
 				}
 			}
+			if (m_Config.Ordered)
+			{
+				m_LastDequeueSequence = start;
+			}
 			for (int i = 0; i < len; i++)
 			{
 				m_Buffer.TryGetValue(start, out var fragment);
@@ -122,6 +135,24 @@ namespace SRConnection.Channel
 			}
 			return true;
 
+		}
+
+		void TryRemoveLessThanLastDequeueSequence()
+		{
+			foreach (var kvp in m_Buffer)
+			{
+				if (!SeqUtil.IsGreaterEqual(m_LastDequeueSequence, kvp.Key))
+				{
+					break;
+				}
+				kvp.Value.RemoveRef();
+				m_Count.Remove(kvp.Value.Id);
+				m_RemoveBuffer.Enqueue(kvp.Key);
+			}
+			while (m_RemoveBuffer.Count > 0)
+			{
+				m_Buffer.Remove(m_RemoveBuffer.Dequeue());
+			}
 		}
 
 		public void Dispose()
