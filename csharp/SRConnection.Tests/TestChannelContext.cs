@@ -31,6 +31,17 @@ namespace SRConnection.Tests
 			}
 		}
 
+		public void Reverse()
+		{
+			var tmp = new List<byte[]>(SentQueue);
+			SentQueue.Clear();
+			tmp.Reverse();
+			foreach (var buf in tmp)
+			{
+				SentQueue.Enqueue(buf);
+			}
+		}
+
 		public bool Receive(UnreliableFlowControl control, out List<Fragment> output)
 		{
 			output = new List<Fragment>();
@@ -91,6 +102,11 @@ namespace SRConnection.Tests
 				}
 			}
 			return false;
+		}
+
+		public void DisconnectError(short channelId, int connectionId, string reason)
+		{
+			throw new Exception(reason);
 		}
 	}
 }
