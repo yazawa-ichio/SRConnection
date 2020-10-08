@@ -17,6 +17,7 @@ namespace SRConnection.Channel
 		short m_SendSequence;
 		ReliableChannelConfig m_Config;
 		bool m_SendAckFlag;
+		TimeSpan m_TimeoutTimer;
 
 		public ReliableFlowControl(short channelId, int connectionId, IChannelContext ctx, ReliableChannelConfig config = null)
 		{
@@ -25,6 +26,7 @@ namespace SRConnection.Channel
 			m_Context = ctx;
 			m_Config = config ?? new ReliableChannelConfig();
 			m_ReceiveQueue = new ReliableFragmentQueue();
+			m_TimeoutTimer = m_Config.Timeout;
 		}
 
 		public void Send(List<Fragment> input)
@@ -88,6 +90,7 @@ namespace SRConnection.Channel
 				}
 				packet.Dispose();
 				m_AckWaitList.RemoveAt(0);
+				m_TimeoutTimer = m_Config.Timeout;
 			}
 			while (m_SendWaitList.Count > 0 && m_AckWaitList.Count < m_Config.MaxWindowSize)
 			{
@@ -118,6 +121,14 @@ namespace SRConnection.Channel
 			if (m_SendAckFlag)
 			{
 				SendAck();
+			}
+			if (m_AckWaitList.Count > 0)
+			{
+				m_TimeoutTimer -= delta;
+				if (m_TimeoutTimer < TimeSpan.Zero)
+				{
+					m_Context.DisconnectError(m_ChannelId, m_ConnectionId, "Ack Timeout");
+				}
 			}
 		}
 

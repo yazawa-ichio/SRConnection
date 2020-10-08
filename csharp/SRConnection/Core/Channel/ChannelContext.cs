@@ -15,6 +15,13 @@
 		{
 			return m_Impl.Send(connectionId, buf, offset, size, encrypt);
 		}
+
+		public void DisconnectError(short channelId, int connectionId, string reason)
+		{
+			//TODO:Reasonをアプリレイヤーに引き渡す
+			m_Impl.SendDisconnect(connectionId);
+		}
+
 	}
 
 }
