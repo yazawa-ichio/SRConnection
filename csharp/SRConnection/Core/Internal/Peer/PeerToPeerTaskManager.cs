@@ -208,7 +208,6 @@ namespace SRConnection
 		void UpdateListImpl(PeerInfo[] list)
 		{
 			m_PeerInfoList = list;
-			bool requestFlag = true;
 			var removeList = new HashSet<int>(m_ConnectToPeerTaskList.Select(x => x.ConnectionId));
 			foreach (var info in m_PeerInfoList)
 			{
@@ -218,12 +217,12 @@ namespace SRConnection
 					peer.Update(info);
 					continue;
 				}
-				//接続リクエストはリストの自分よりも上のPeerに対して行う
 				if (info.ConnectionId == m_Connection.SelfId)
 				{
-					requestFlag = false;
 					continue;
 				}
+				//接続リクエストは自分よりも大きなConnectionIdに対して行う
+				bool requestFlag = info.ConnectionId > m_Connection.SelfId;
 				var task = GetTask(info.ConnectionId);
 				task?.UpdateInfo(info);
 				if (task == null)
