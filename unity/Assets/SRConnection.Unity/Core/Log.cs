@@ -6,9 +6,9 @@ namespace SRConnection
 
 	public static class Log
 	{
-		const string ENABLED_ALL = "SRNET_LOG_ALL";
-		const string ENABLED_DEBUG_OR_HIGHER = "SRNET_LOG_DEBUG_OR_HIGHER";
-		const string ENABLED_WARNING_OR_HIGHER = "SRNET_LOG_WARNING_OR_HIGHER";
+		const string ENABLED_ALL = "SRCONNECTION_LOG_ALL";
+		const string ENABLED_DEBUG_OR_HIGHER = "SRCONNECTION_LOG_DEBUG_OR_HIGHER";
+		const string ENABLED_WARNING_OR_HIGHER = "SRCONNECTION_LOG_WARNING_OR_HIGHER";
 
 		public enum LogLevel
 		{

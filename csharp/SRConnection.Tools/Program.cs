@@ -15,7 +15,7 @@ namespace SRConnection.Tools
 		}
 
 		[Command(Description = "RSA  Key To XML")]
-		public void KeyToXML([Argument]string path, [Option("private")] bool privateKey, [Option("public")] bool publicKey)
+		public void KeyToXML([Argument] string path, [Option("private")] bool privateKey, [Option("public")] bool publicKey)
 		{
 			if (!privateKey && !publicKey)
 			{
@@ -41,7 +41,7 @@ namespace SRConnection.Tools
 		}
 
 		[Command(Description = "RSA Key Generate")]
-		public void KeyGenerate([Argument]string path = ".", [Option("size")] int keySize = 4096)
+		public void KeyGenerate([Argument] string path = ".", [Option("size")] int keySize = 4096)
 		{
 			string privateKeyText = File.ReadAllText("../../cert/private.key");
 			IOpenSSLPrivateKeyDecoder decoder = new OpenSSLPrivateKeyDecoder();
