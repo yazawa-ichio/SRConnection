@@ -18,7 +18,7 @@ unityのサンプル実装に簡単な実装例があります。
 upmでインストールできます。  
 manifest.jsonに以下のパッケージを追加してください。  
 
-`"jp.yazawa-ichio.srconnection.unity": "https://github.com/yazawa-ichio/SRConnection.git?path=unity/Assets/SRConnection.Unity"`
+`"jp.ilib.srconnection.unity": "https://github.com/yazawa-ichio/SRConnection.git?path=unity/Assets/SRConnection.Unity"`
 
 
 ### 暗号部分の問題点について
@@ -31,4 +31,4 @@ manifest.jsonに以下のパッケージを追加してください。
 ### 今後するかもしれない事
 
 * RUDPの実装がとりあえずの物でパフォーマンスを確認していないので最適化するかも
-* UnityのWebGL対応
+* 暗号の方式をChaCha20Poly1305に切り替え+シーケンス番号のランダム化と長さを内部的にintに変更（送信サイズは2byte）
