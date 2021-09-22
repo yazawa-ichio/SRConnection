@@ -1,8 +1,8 @@
 {
-  "name": "jp.yazawa-ichio.srconnection.unity",
+  "name": "jp.ilib.srconnection.unity",
   "displayName": "SRConnection.Unity",
-  "version": "0.0.3",
-  "unity": "2019.3",
+  "version": "0.0.4",
+  "unity": "2019.4",
   "description": "SRConnection Unity Realtime P2P Library",
   "keywords": [],
   "Author": "yazawa-ichio (yazawa922473@gmail.com)",
